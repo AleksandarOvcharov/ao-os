@@ -93,7 +93,7 @@ ao-os/
 - `sysinfo` - Display system information (CPU, RAM, uptime)
 - `mem` - Display memory usage statistics
 - `uptime` - Display system uptime
-- `color <fg> <bg>` - Change terminal colors (e.g., `color light_green black`)
+- `color <fg>` - Change text color (e.g., `color light_green`)
 - `reboot` - Reboot the system
 - `shutdown` - Shutdown the system
 

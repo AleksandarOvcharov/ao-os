@@ -7,6 +7,11 @@
 - **Kernel**: 32-bit protected mode kernel written in C and Assembly
 - **Version System**: Kernel version tracking with build date
 - **Panic System**: Kernel panic handler for fatal errors with colored screen
+- **Kernel Logging**:
+  - Log levels: INFO, WARN, ERROR, DEBUG
+  - Colored output for different log levels
+  - Functions: klog(), klog_info(), klog_warn(), klog_error(), klog_debug()
+  - Useful for debugging and system monitoring
 - **Interrupt Handling**:
   - Interrupt Descriptor Table (IDT) with 256 entries
   - PIC remapping for IRQ handling
@@ -56,7 +61,7 @@
 #### Display Commands
 - **clear**: Clear the screen
 - **echo**: Print text to the screen
-- **color**: Change terminal colors (16 foreground × 16 background = 256 combinations)
+- **color**: Change text foreground color (16 colors available)
 
 #### System Commands
 - **reboot**: Restart the computer using keyboard controller reset

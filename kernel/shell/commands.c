@@ -22,7 +22,7 @@ void cmd_help(void) {
     terminal_writestring("  sysinfo  - Display system information\n");
     terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  uptime   - Display system uptime\n");
-    terminal_writestring("  color    - Change text color (usage: color <fg> <bg>)\n");
+    terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
     terminal_writestring("  reboot   - Reboot the system\n");
     terminal_writestring("  shutdown - Shutdown the system\n");
     
@@ -114,36 +114,23 @@ static enum vga_color parse_color(const char* color_name) {
 
 void cmd_color(const char* args) {
     if (!args || !*args) {
-        terminal_writestring("Usage: color <foreground> <background>\n");
-        terminal_writestring("Example: color light_green black\n");
+        terminal_writestring("Usage: color <foreground>\n");
+        terminal_writestring("Example: color light_green\n");
         return;
     }
     
     char fg_name[32] = {0};
-    char bg_name[32] = {0};
-    int i = 0, j = 0;
+    int i = 0;
     
     while (args[i] && args[i] != ' ' && i < 31) {
-        fg_name[j++] = args[i++];
+        fg_name[i] = args[i];
+        i++;
     }
-    fg_name[j] = '\0';
-    
-    while (args[i] == ' ') i++;
-    
-    j = 0;
-    while (args[i] && args[i] != ' ' && j < 31) {
-        bg_name[j++] = args[i++];
-    }
-    bg_name[j] = '\0';
-    
-    if (bg_name[0] == '\0') {
-        strcpy(bg_name, "black");
-    }
+    fg_name[i] = '\0';
     
     enum vga_color fg = parse_color(fg_name);
-    enum vga_color bg = parse_color(bg_name);
     
-    terminal_setcolor(vga_entry_color(fg, bg));
+    terminal_setcolor(vga_entry_color(fg, VGA_COLOR_BLACK));
     terminal_writestring("Color changed successfully!\n");
 }
 
