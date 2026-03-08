@@ -105,6 +105,8 @@ ao-os/
 - `about` - Display OS information with colors
 - `kernel -v` or `kernel --version` - Display kernel version and build information
 - `sysinfo` - Display system information (CPU, RAM, uptime)
+- `diskinfo` - Display disk controller information
+- `sconsole --status` - Display serial console status
 - `mem` - Display memory usage statistics
 - `uptime` - Display system uptime
 - `color <fg>` - Change text color (e.g., `color light_green`)

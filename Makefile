@@ -28,7 +28,8 @@ KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/timer.o \
               $(BUILD_DIR)/cpu.o \
               $(BUILD_DIR)/klog.o \
-              $(BUILD_DIR)/serial.o
+              $(BUILD_DIR)/serial.o \
+              $(BUILD_DIR)/ata.o
 
 KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
 ISO_FILE = ao-os.iso
@@ -92,6 +93,9 @@ $(BUILD_DIR)/klog.o: $(KERNEL_DIR)/klog.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/serial.o: $(KERNEL_DIR)/drivers/serial.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/ata.o: $(KERNEL_DIR)/drivers/ata.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(KERNEL_BIN): $(BOOT_OBJ) $(KERNEL_OBJS)

@@ -12,5 +12,7 @@ void cmd_kernel(const char* args);
 void cmd_mem(void);
 void cmd_uptime(void);
 void cmd_sysinfo(void);
+void cmd_diskinfo(void);
+void cmd_sconsole(const char* args);
 
 #endif

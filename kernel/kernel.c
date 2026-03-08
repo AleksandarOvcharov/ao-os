@@ -6,6 +6,7 @@
 #include "timer.h"
 #include "klog.h"
 #include "serial.h"
+#include "ata.h"
 
 void kernel_main(void) {
     terminal_initialize();
@@ -25,6 +26,10 @@ void kernel_main(void) {
     
     klog_info("Initializing memory manager...");
     memory_init();
+    timer_wait(30);
+    
+    klog_info("Initializing ATA disk driver...");
+    ata_init();
     timer_wait(30);
     
     klog_info("Initializing keyboard driver...");

@@ -2,6 +2,38 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.3.5] - 2026-03-08
+
+### Added
+- **diskinfo command**
+  - Display ATA disk controller status
+  - Shows controller port, availability, mode (PIO), and addressing (LBA28)
+  - Helpful for checking if disk is detected
+- **sconsole command**
+  - Check serial console status with `sconsole --status`
+  - Shows COM1 port configuration (baud rate, data bits, parity, stop bits)
+  - Displays initialization status
+  - Reminds about QEMU `-serial stdio` flag
+
+### Changed
+- Version bumped to 0.3.5
+- Updated help command with new commands
+
+## [0.3.4] - 2026-03-08
+
+### Added
+- **ATA PIO disk driver**
+  - Primary ATA controller support (0x1F0-0x1F7 ports)
+  - Sector read function: `ata_read_sector(lba, buffer)`
+  - Sector write function: `ata_write_sector(lba, buffer)`
+  - LBA28 addressing mode (supports up to 128GB disks)
+  - Status checking and error handling
+  - First step towards filesystem support
+
+### Changed
+- Version bumped to 0.3.4
+- Kernel can now read and write disk sectors directly
+
 ## [0.3.3] - 2026-03-08
 
 ### Added

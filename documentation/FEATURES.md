@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.3.2 - Aurora)
+## Current Features (v0.3.5 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -34,6 +34,13 @@
 - **Special Characters**: Support for newline, tab, and backspace
 - **Serial Console**: COM1 serial port output for debugging (use with `qemu -serial stdio`)
 
+### Storage
+- **ATA PIO Driver**: Primary ATA controller support
+  - Read/write sectors using PIO mode
+  - LBA28 addressing (up to 128GB disks)
+  - Error detection and status checking
+  - Foundation for filesystem implementation
+
 ### Input
 - **Keyboard Driver**: PS/2 keyboard support
 - **Shift Key**: Proper handling of shift key for uppercase and symbols
@@ -56,6 +63,8 @@
 - **about**: Show OS information with colored output
 - **kernel**: Display kernel version information (supports -v and --version flags)
 - **sysinfo**: Display system information (CPU vendor, RAM, uptime, OS version)
+- **diskinfo**: Display ATA disk controller status and configuration
+- **sconsole**: Display serial console status (use `sconsole --status`)
 - **mem**: Display memory usage statistics (total, used, free)
 - **uptime**: Display system uptime in human-readable format
 

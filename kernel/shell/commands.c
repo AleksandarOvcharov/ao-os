@@ -7,6 +7,8 @@
 #include "timer.h"
 #include "cpu.h"
 #include "shell.h"
+#include "ata.h"
+#include "serial.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -21,6 +23,8 @@ void cmd_help(void) {
     terminal_writestring("  about    - Display OS information\n");
     terminal_writestring("  kernel   - Kernel information (usage: kernel -v or --version)\n");
     terminal_writestring("  sysinfo  - Display system information\n");
+    terminal_writestring("  diskinfo - Display disk information\n");
+    terminal_writestring("  sconsole - Serial console status (usage: sconsole --status)\n");
     terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  uptime   - Display system uptime\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
@@ -451,4 +455,125 @@ void cmd_sysinfo(void) {
     terminal_writestring("\n");
     
     terminal_setcolor(label_color);
+}
+
+void cmd_diskinfo(void) {
+    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    uint8_t value_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("========================================\n");
+    terminal_writestring("  Disk Information\n");
+    terminal_writestring("========================================\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("ATA Controller: ");
+    
+    if (ata_is_available()) {
+        terminal_setcolor(value_color);
+        terminal_writestring("Primary (0x1F0)\n");
+        
+        terminal_setcolor(label_color);
+        terminal_writestring("Status:         ");
+        terminal_setcolor(value_color);
+        terminal_writestring("Available\n");
+        
+        terminal_setcolor(label_color);
+        terminal_writestring("Mode:           ");
+        terminal_setcolor(value_color);
+        terminal_writestring("PIO\n");
+        
+        terminal_setcolor(label_color);
+        terminal_writestring("Addressing:     ");
+        terminal_setcolor(value_color);
+        terminal_writestring("LBA28\n");
+    } else {
+        terminal_setcolor(error_color);
+        terminal_writestring("Not detected\n");
+        
+        terminal_setcolor(label_color);
+        terminal_writestring("Status:         ");
+        terminal_setcolor(error_color);
+        terminal_writestring("Unavailable\n");
+    }
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("========================================\n");
+    
+    terminal_setcolor(label_color);
+}
+
+void cmd_sconsole(const char* args) {
+    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    uint8_t value_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    
+    if (!args || !*args) {
+        terminal_writestring("Usage: sconsole --status\n");
+        return;
+    }
+    
+    if (strcmp(args, "--status") == 0) {
+        terminal_setcolor(title_color);
+        terminal_writestring("========================================\n");
+        terminal_writestring("  Serial Console Status\n");
+        terminal_writestring("========================================\n");
+        
+        terminal_setcolor(label_color);
+        terminal_writestring("Port:           ");
+        terminal_setcolor(value_color);
+        terminal_writestring("COM1 (0x3F8)\n");
+        
+        terminal_setcolor(label_color);
+        terminal_writestring("Status:         ");
+        
+        if (serial_is_initialized()) {
+            terminal_setcolor(value_color);
+            terminal_writestring("Initialized\n");
+            
+            terminal_setcolor(label_color);
+            terminal_writestring("Baud Rate:      ");
+            terminal_setcolor(value_color);
+            terminal_writestring("115200\n");
+            
+            terminal_setcolor(label_color);
+            terminal_writestring("Data Bits:      ");
+            terminal_setcolor(value_color);
+            terminal_writestring("8\n");
+            
+            terminal_setcolor(label_color);
+            terminal_writestring("Parity:         ");
+            terminal_setcolor(value_color);
+            terminal_writestring("None\n");
+            
+            terminal_setcolor(label_color);
+            terminal_writestring("Stop Bits:      ");
+            terminal_setcolor(value_color);
+            terminal_writestring("1\n");
+            
+            terminal_setcolor(label_color);
+            terminal_writestring("QEMU:           ");
+            terminal_setcolor(value_color);
+            terminal_writestring("Use -serial stdio\n");
+        } else {
+            uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+            terminal_setcolor(error_color);
+            terminal_writestring("Not initialized\n");
+        }
+        
+        terminal_setcolor(title_color);
+        terminal_writestring("========================================\n");
+        
+        terminal_setcolor(label_color);
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Unknown option: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        terminal_setcolor(label_color);
+        terminal_writestring("Usage: sconsole --status\n");
+    }
 }
