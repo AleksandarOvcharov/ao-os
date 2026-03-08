@@ -1,7 +1,7 @@
 #include "editor.h"
 #include "vga.h"
 #include "keyboard.h"
-#include "ramfs.h"
+#include "fs.h"
 #include "string.h"
 
 #define KEY_ESC 27
@@ -16,7 +16,7 @@ void editor_open(const char* filename) {
     memset(buffer, 0, EDITOR_BUFFER_SIZE);
     
     uint32_t size;
-    if (ramfs_read(filename, buffer, &size) == 0) {
+    if (fs_read(filename, buffer, &size) == 0) {
         cursor = size;
     }
     
@@ -59,7 +59,7 @@ void editor_open(const char* filename) {
         }
         
         if (key == KEY_ESC) {
-            ramfs_create(filename, buffer, cursor);
+            fs_create(filename, buffer, cursor);
             
             terminal_writestring("\n\n");
             uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);

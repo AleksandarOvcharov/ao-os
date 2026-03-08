@@ -2,6 +2,27 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.5.2] - 2026-03-08
+
+### Added
+- **Filesystem abstraction layer**
+  - Generic filesystem interface: `fs_init()`, `fs_create()`, `fs_read()`, `fs_delete()`, `fs_list()`
+  - Decouples applications from specific filesystem implementations
+  - Shell and editor now use `fs_*` functions instead of `ramfs_*`
+  - Easy to add new filesystems (FAT, ext2, etc.) without changing applications
+  - Clean separation of concerns
+
+### Changed
+- Version bumped to 0.5.2
+- Shell commands now use filesystem abstraction
+- Editor now uses filesystem abstraction
+- Kernel initialization uses `fs_init()` instead of `ramfs_init()`
+
+### Technical
+- Created `fs.h` and `fs.c` abstraction layer
+- ramfs is now a backend implementation
+- Future filesystems can be swapped by changing fs.c implementation
+
 ## [0.5.1] - 2026-03-08
 
 ### Added

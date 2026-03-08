@@ -9,7 +9,7 @@
 #include "shell.h"
 #include "ata.h"
 #include "serial.h"
-#include "ramfs.h"
+#include "fs.h"
 #include "editor.h"
 
 void cmd_help(void) {
@@ -591,11 +591,12 @@ void cmd_ls(void) {
     uint8_t file_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
     uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     
-    int count = ramfs_get_file_count();
-    ramfs_file_t* files = ramfs_get_files();
+    fs_file_info_t* files;
+    int count;
+    fs_list(&files, &count);
     
     terminal_setcolor(title_color);
-    terminal_writestring("Files in RAM filesystem:\n");
+    terminal_writestring("Files in filesystem:\n");
     terminal_setcolor(label_color);
     
     if (count == 0) {
@@ -603,7 +604,7 @@ void cmd_ls(void) {
         return;
     }
     
-    for (int i = 0; i < MAX_FILES; i++) {
+    for (int i = 0; i < 16; i++) {
         if (files[i].used) {
             terminal_writestring("  ");
             terminal_setcolor(file_color);
@@ -641,10 +642,10 @@ void cmd_cat(const char* args) {
         return;
     }
     
-    char buffer[MAX_FILESIZE];
+    char buffer[FS_MAX_FILESIZE];
     uint32_t size;
     
-    if (ramfs_read(args, buffer, &size) == 0) {
+    if (fs_read(args, buffer, &size) == 0) {
         for (uint32_t i = 0; i < size; i++) {
             terminal_putchar(buffer[i]);
         }
@@ -666,10 +667,10 @@ void cmd_write(const char* args) {
         return;
     }
     
-    char filename[MAX_FILENAME];
+    char filename[FS_MAX_FILENAME];
     int i = 0, j = 0;
     
-    while (args[i] && args[i] != ' ' && j < MAX_FILENAME - 1) {
+    while (args[i] && args[i] != ' ' && j < FS_MAX_FILENAME - 1) {
         filename[j++] = args[i++];
     }
     filename[j] = '\0';
@@ -684,7 +685,7 @@ void cmd_write(const char* args) {
     const char* content = &args[i];
     uint32_t size = strlen(content);
     
-    if (size > MAX_FILESIZE) {
+    if (size > FS_MAX_FILESIZE) {
         uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
         terminal_setcolor(error_color);
         terminal_writestring("Error: Content too large (max 512 bytes)\n");
@@ -693,7 +694,7 @@ void cmd_write(const char* args) {
         return;
     }
     
-    if (ramfs_create(filename, content, size) == 0) {
+    if (fs_create(filename, content, size) == 0) {
         uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
         terminal_setcolor(success_color);
         terminal_writestring("File written: ");
@@ -716,7 +717,7 @@ void cmd_rm(const char* args) {
         return;
     }
     
-    if (ramfs_delete(args) == 0) {
+    if (fs_delete(args) == 0) {
         uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
         terminal_setcolor(success_color);
         terminal_writestring("File removed: ");
@@ -741,7 +742,7 @@ void cmd_touch(const char* args) {
         return;
     }
     
-    if (ramfs_create(args, "", 0) == 0) {
+    if (fs_create(args, "", 0) == 0) {
         uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
         terminal_setcolor(success_color);
         terminal_writestring("File created: ");

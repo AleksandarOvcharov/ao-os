@@ -31,6 +31,7 @@ KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/serial.o \
               $(BUILD_DIR)/ata.o \
               $(BUILD_DIR)/ramfs.o \
+              $(BUILD_DIR)/fs.o \
               $(BUILD_DIR)/editor.o
 
 KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
@@ -101,6 +102,9 @@ $(BUILD_DIR)/ata.o: $(KERNEL_DIR)/drivers/ata.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/ramfs.o: $(KERNEL_DIR)/fs/ramfs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/fs.o: $(KERNEL_DIR)/fs/fs.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/editor.o: $(KERNEL_DIR)/editor/editor.c | $(BUILD_DIR)

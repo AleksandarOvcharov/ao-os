@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.5.1 - Aurora)
+## Current Features (v0.5.2 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -40,6 +40,11 @@
 - **Serial Console**: COM1 serial port output for debugging (use with `qemu -serial stdio`)
 
 ### Storage
+- **Filesystem Abstraction Layer**:
+  - Generic filesystem interface (`fs_init()`, `fs_create()`, `fs_read()`, `fs_delete()`, `fs_list()`)
+  - Decouples applications from filesystem implementations
+  - Easy to add new filesystems (FAT, ext2, etc.)
+  - Clean architecture for future expansion
 - **ATA PIO Driver**: Primary ATA controller support
   - Read/write sectors using PIO mode
   - LBA28 addressing (up to 128GB disks)
@@ -52,7 +57,7 @@
   - Maximum filename length: 31 characters + null terminator
   - Supports basic operations: create, write, read, list, delete
   - Automatic null terminator for text files
-  - Designed as a simple temporary storage layer before disk-backed filesystems
+  - Backend implementation for filesystem abstraction layer
 
 ### Input
 - **Keyboard Driver**: PS/2 keyboard support
