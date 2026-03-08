@@ -51,5 +51,9 @@ int fat12_create(const char* name, const char* data, uint32_t size);
 int fat12_read(const char* name, char* buffer, uint32_t* size);
 int fat12_delete(const char* name);
 int fat12_list(void** entries, int* count);
+int fat12_mkdir(const char* name);
+int fat12_rmdir(const char* name);
+int fat12_chdir(const char* name);
+const char* fat12_getcwd(void);
 
 #endif

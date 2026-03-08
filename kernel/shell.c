@@ -3,6 +3,7 @@
 #include "keyboard.h"
 #include "string.h"
 #include "commands.h"
+#include "fs.h"
 
 #define MAX_COMMAND_LENGTH 256
 #define HISTORY_SIZE 10
@@ -19,7 +20,14 @@ static uint8_t user_color = 0;
 void shell_print_prompt(void) {
     uint8_t prompt_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
     terminal_setcolor(prompt_color);
-    terminal_writestring("AO-OS> ");
+    terminal_writestring("AO-OS:");
+    
+    uint8_t path_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    terminal_setcolor(path_color);
+    terminal_writestring(fs_getcwd());
+    
+    terminal_setcolor(prompt_color);
+    terminal_writestring("> ");
     terminal_setcolor(user_color);
 }
 
@@ -103,6 +111,14 @@ void shell_execute_command(const char* cmd) {
         cmd_checkfs();
     } else if (strcmp(cmd, "install") == 0) {
         cmd_install();
+    } else if (strncmp(cmd, "mkdir", cmd_len) == 0 && cmd_len == 5) {
+        cmd_mkdir(args);
+    } else if (strncmp(cmd, "rmdir", cmd_len) == 0 && cmd_len == 5) {
+        cmd_rmdir(args);
+    } else if (strncmp(cmd, "cd", cmd_len) == 0 && cmd_len == 2) {
+        cmd_cd(args);
+    } else if (strncmp(cmd, "pwd", cmd_len) == 0 && cmd_len == 3) {
+        cmd_pwd();
     } else if (strncmp(cmd, "ls", cmd_len) == 0 && cmd_len == 2) {
         cmd_ls();
     } else if (strncmp(cmd, "cat", cmd_len) == 0 && cmd_len == 3) {

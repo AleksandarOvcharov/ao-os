@@ -2,6 +2,30 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.7.1] - 2026-03-08
+
+### Added
+- **Directory Support**
+  - `mkdir` command - Create directories
+  - `rmdir` command - Remove directories
+  - `cd` command - Change current directory
+  - `pwd` command - Print working directory
+  - Directory tracking in FAT12 filesystem
+  - Visual distinction for directories in `ls` command ([DIR] marker)
+  - Support for special paths: `/` (root) and `..` (parent)
+
+### Changed
+- `ls` command now shows directories with blue [DIR] marker
+- FAT12 filesystem tracks current working directory
+- File info structure includes `is_directory` flag
+
+### Technical
+- Added `fs_mkdir()`, `fs_rmdir()`, `fs_chdir()`, `fs_getcwd()` to filesystem API
+- Implemented FAT12 directory operations
+- Added current directory tracking variable
+- Directory entries use FAT12_ATTR_DIRECTORY attribute
+- ramfs stubs for directory operations (not fully functional)
+
 ## [0.7.0] - 2026-03-08
 
 ### Added

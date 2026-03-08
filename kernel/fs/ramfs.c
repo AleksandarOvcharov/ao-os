@@ -92,3 +92,25 @@ ramfs_file_t* ramfs_get_files(void) {
 int ramfs_get_file_count(void) {
     return file_count;
 }
+
+int ramfs_mkdir(const char* name) {
+    (void)name;
+    klog_warn("ramfs does not support directories");
+    return -1;
+}
+
+int ramfs_rmdir(const char* name) {
+    (void)name;
+    klog_warn("ramfs does not support directories");
+    return -1;
+}
+
+int ramfs_chdir(const char* name) {
+    (void)name;
+    klog_warn("ramfs does not support directories");
+    return -1;
+}
+
+const char* ramfs_getcwd(void) {
+    return "/";
+}

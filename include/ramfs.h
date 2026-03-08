@@ -21,5 +21,9 @@ int ramfs_delete(const char* name);
 int ramfs_list(void);
 ramfs_file_t* ramfs_get_files(void);
 int ramfs_get_file_count(void);
+int ramfs_mkdir(const char* name);
+int ramfs_rmdir(const char* name);
+int ramfs_chdir(const char* name);
+const char* ramfs_getcwd(void);
 
 #endif

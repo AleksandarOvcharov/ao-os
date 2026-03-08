@@ -73,3 +73,31 @@ const char* fs_get_type(void) {
     }
     return "ramfs";
 }
+
+int fs_mkdir(const char* name) {
+    if (use_fat12) {
+        return fat12_mkdir(name);
+    }
+    return ramfs_mkdir(name);
+}
+
+int fs_rmdir(const char* name) {
+    if (use_fat12) {
+        return fat12_rmdir(name);
+    }
+    return ramfs_rmdir(name);
+}
+
+int fs_chdir(const char* name) {
+    if (use_fat12) {
+        return fat12_chdir(name);
+    }
+    return ramfs_chdir(name);
+}
+
+const char* fs_getcwd(void) {
+    if (use_fat12) {
+        return fat12_getcwd();
+    }
+    return ramfs_getcwd();
+}

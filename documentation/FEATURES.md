@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.7.0 - Aurora)
+## Current Features (v0.7.1 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -100,7 +100,9 @@
 - **color**: Change text foreground color (16 colors available)
 
 #### Filesystem Commands
-- **ls**: List all files in RAM filesystem with sizes
+- **ls**: List all files and directories in filesystem
+  - Files shown with size in bytes
+  - Directories shown with blue [DIR] marker
 - **cat**: Display file contents (usage: `cat <filename>`)
 - **edit**: Enhanced text editor (usage: `edit <filename>`)
   - Live status bar with cursor position (line:column)
@@ -116,6 +118,12 @@
 - **write**: Create or modify files (usage: `write <filename> <content>`)
 - **rm**: Remove files (usage: `rm <filename>`)
 - **touch**: Create empty files (usage: `touch <filename>`)
+- **mkdir**: Create directory (usage: `mkdir <dirname>`)
+- **rmdir**: Remove directory (usage: `rmdir <dirname>`)
+- **cd**: Change current directory (usage: `cd <dirname>`)
+  - `cd /` - Go to root directory
+  - `cd ..` - Go to parent directory
+- **pwd**: Print working directory
 
 #### System Commands
 - **install**: Install AO OS to disk (with confirmation prompt)

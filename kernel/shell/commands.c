@@ -37,6 +37,10 @@ void cmd_help(void) {
     terminal_writestring("  write    - Write to file (usage: write <filename> <content>)\n");
     terminal_writestring("  rm       - Remove file (usage: rm <filename>)\n");
     terminal_writestring("  touch    - Create empty file (usage: touch <filename>)\n");
+    terminal_writestring("  mkdir    - Create directory (usage: mkdir <dirname>)\n");
+    terminal_writestring("  rmdir    - Remove directory (usage: rmdir <dirname>)\n");
+    terminal_writestring("  cd       - Change directory (usage: cd <dirname>)\n");
+    terminal_writestring("  pwd      - Print working directory\n");
     terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  uptime   - Display system uptime\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
@@ -591,55 +595,63 @@ void cmd_sconsole(const char* args) {
 }
 
 void cmd_ls(void) {
-    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    uint8_t file_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    
     fs_file_info_t* files;
     int count;
-    fs_list(&files, &count);
     
-    terminal_setcolor(title_color);
-    terminal_writestring("Files in filesystem:\n");
-    terminal_setcolor(label_color);
-    
-    if (count == 0) {
-        terminal_writestring("  (empty)\n");
+    if (fs_list(&files, &count) != 0) {
+        terminal_writestring("Failed to list files\n");
         return;
     }
     
-    int displayed = 0;
-    for (int i = 0; i < 224 && displayed < count; i++) {
-        if (files[i].used || files[i].name[0] != 0) {
-            terminal_writestring("  ");
+    if (count == 0) {
+        terminal_writestring("No files found\n");
+        return;
+    }
+    
+    uint8_t dir_color = vga_entry_color(VGA_COLOR_LIGHT_BLUE, VGA_COLOR_BLACK);
+    uint8_t file_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t size_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    
+    for (int i = 0; i < count && i < 224; i++) {
+        if (!files[i].used) continue;
+        
+        if (files[i].is_directory) {
+            terminal_setcolor(dir_color);
+            terminal_writestring("[DIR] ");
+            terminal_writestring(files[i].name);
+            terminal_writestring("\n");
+        } else {
             terminal_setcolor(file_color);
             terminal_writestring(files[i].name);
-            terminal_setcolor(label_color);
+            
+            terminal_setcolor(size_color);
             terminal_writestring(" (");
             
             char size_str[16];
             uint32_t size = files[i].size;
-            int j = 0;
+            int idx = 0;
+            
             if (size == 0) {
-                size_str[j++] = '0';
+                size_str[idx++] = '0';
             } else {
-                char digits[12];
-                int k = 0;
+                char temp[16];
+                int t = 0;
                 while (size > 0) {
-                    digits[k++] = '0' + (size % 10);
+                    temp[t++] = '0' + (size % 10);
                     size /= 10;
                 }
-                while (k > 0) {
-                    size_str[j++] = digits[--k];
+                while (t > 0) {
+                    size_str[idx++] = temp[--t];
                 }
             }
-            size_str[j] = '\0';
+            size_str[idx] = '\0';
             
             terminal_writestring(size_str);
             terminal_writestring(" bytes)\n");
-            displayed++;
         }
     }
+    
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 }
 
 void cmd_cat(const char* args) {
@@ -832,4 +844,75 @@ void cmd_install(void) {
     }
     
     installer_run();
+}
+
+void cmd_mkdir(const char* args) {
+    if (!args || args[0] == '\0') {
+        terminal_writestring("Usage: mkdir <dirname>\n");
+        return;
+    }
+    
+    if (fs_mkdir(args) == 0) {
+        uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        terminal_setcolor(success_color);
+        terminal_writestring("Directory created: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Error: Directory already exists or invalid name\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+    }
+}
+
+void cmd_rmdir(const char* args) {
+    if (!args || args[0] == '\0') {
+        terminal_writestring("Usage: rmdir <dirname>\n");
+        return;
+    }
+    
+    if (fs_rmdir(args) == 0) {
+        uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        terminal_setcolor(success_color);
+        terminal_writestring("Directory removed: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Error: Directory not found or not empty\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+    }
+}
+
+void cmd_cd(const char* args) {
+    if (!args || args[0] == '\0') {
+        terminal_writestring("Usage: cd <dirname>\n");
+        return;
+    }
+    
+    if (fs_chdir(args) == 0) {
+        uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        terminal_setcolor(success_color);
+        terminal_writestring("Changed directory to: ");
+        terminal_writestring(fs_getcwd());
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Failed to change directory\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+    }
+}
+
+void cmd_pwd(void) {
+    uint8_t path_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    terminal_setcolor(path_color);
+    terminal_writestring(fs_getcwd());
+    terminal_writestring("\n");
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 }
