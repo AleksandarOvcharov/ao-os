@@ -89,6 +89,7 @@ ao-os/
 - `clear` - Clear the screen
 - `echo <text>` - Print text to the screen
 - `about` - Display OS information with colors
+- `kernel -v` or `kernel --version` - Display kernel version and build information
 - `color <fg> <bg>` - Change terminal colors (e.g., `color light_green black`)
 - `reboot` - Reboot the system
 - `shutdown` - Shutdown the system

@@ -20,7 +20,8 @@ KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/string.o \
               $(BUILD_DIR)/shell.o \
               $(BUILD_DIR)/commands.o \
-              $(BUILD_DIR)/system.o
+              $(BUILD_DIR)/system.o \
+              $(BUILD_DIR)/version.o
 
 KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
 ISO_FILE = ao-os.iso
@@ -57,6 +58,9 @@ $(BUILD_DIR)/commands.o: $(KERNEL_DIR)/shell/commands.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/system.o: $(KERNEL_DIR)/system/system.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/version.o: $(KERNEL_DIR)/version.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(KERNEL_BIN): $(BOOT_OBJ) $(KERNEL_OBJS)

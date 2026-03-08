@@ -2,6 +2,23 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.2.1] - 2026-03-08
+
+### Added
+- **Kernel version system**
+  - New `version.h` header with version constants
+  - `kernel --version` or `kernel -v` command to display kernel information
+  - Version information includes: version number, codename, build date/time
+  - Colored output for kernel version display
+- **Blinking hardware cursor**
+  - VGA hardware cursor that blinks automatically
+  - Cursor follows typing in real-time
+  - Updates on all terminal operations (typing, backspace, newline, clear)
+
+### Changed
+- Updated `help` command to include `kernel` command
+- Version bumped to 0.2.1 (codename: Aurora)
+
 ## [0.2.0] - 2026-03-08
 
 ### Added

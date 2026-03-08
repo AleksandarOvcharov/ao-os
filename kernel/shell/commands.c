@@ -2,6 +2,7 @@
 #include "vga.h"
 #include "system.h"
 #include "string.h"
+#include "version.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -14,6 +15,7 @@ void cmd_help(void) {
     terminal_writestring("  clear    - Clear the screen\n");
     terminal_writestring("  echo     - Print text to the screen\n");
     terminal_writestring("  about    - Display OS information\n");
+    terminal_writestring("  kernel   - Kernel information (usage: kernel -v or --version)\n");
     terminal_writestring("  color    - Change text color (usage: color <fg> <bg>)\n");
     terminal_writestring("  reboot   - Reboot the system\n");
     terminal_writestring("  shutdown - Shutdown the system\n");
@@ -137,4 +139,23 @@ void cmd_color(const char* args) {
     
     terminal_setcolor(vga_entry_color(fg, bg));
     terminal_writestring("Color changed successfully!\n");
+}
+
+void cmd_kernel(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: kernel [--version | -v]\n");
+        return;
+    }
+    
+    if (strcmp(args, "--version") == 0 || strcmp(args, "-v") == 0) {
+        kernel_print_full_info();
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Unknown option: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+        terminal_writestring("Usage: kernel [--version | -v]\n");
+    }
 }

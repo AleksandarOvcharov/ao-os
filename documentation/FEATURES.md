@@ -1,15 +1,17 @@
 # AO OS Features
 
-## Current Features (v0.2.0)
+## Current Features (v0.2.1 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
 - **Kernel**: 32-bit protected mode kernel written in C and Assembly
+- **Version System**: Kernel version tracking with build date/time
 - **Memory Management**: Basic stack setup and memory initialization
 
 ### Display
 - **VGA Text Mode**: 80x25 character display
 - **Color Support**: 16 foreground and 16 background colors
+- **Hardware Cursor**: Blinking cursor that follows typing in real-time
 - **Scrolling**: Automatic screen scrolling when text reaches bottom
 - **Special Characters**: Support for newline, tab, and backspace
 
@@ -20,16 +22,18 @@
 
 ### Shell/Terminal
 - **Interactive Shell**: Command-line interface with prompt
-- **Command Parsing**: Parse commands and arguments
+- **Command Parsing**: Parse commands and arguments with flag support
 - **Colored Prompt**: Green prompt for better visibility
 - **Error Handling**: Red error messages for invalid commands
 - **Command Buffer**: 256-character command buffer
+- **Visual Feedback**: Blinking cursor shows typing position
 
 ### Commands
 
 #### Information Commands
 - **help**: Display all available commands with descriptions
 - **about**: Show OS information with colored output
+- **kernel**: Display kernel version information (supports -v and --version flags)
 
 #### Display Commands
 - **clear**: Clear the screen

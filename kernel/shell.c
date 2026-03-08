@@ -40,6 +40,8 @@ void shell_execute_command(const char* cmd) {
         cmd_echo(args);
     } else if (strncmp(cmd, "about", cmd_len) == 0 && cmd_len == 5) {
         cmd_about();
+    } else if (strncmp(cmd, "kernel", cmd_len) == 0 && cmd_len == 6) {
+        cmd_kernel(args);
     } else if (strncmp(cmd, "color", cmd_len) == 0 && cmd_len == 5) {
         cmd_color(args);
     } else if (strncmp(cmd, "reboot", cmd_len) == 0 && cmd_len == 6) {
