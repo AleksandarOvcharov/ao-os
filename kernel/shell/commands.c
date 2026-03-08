@@ -4,6 +4,7 @@
 #include "string.h"
 #include "version.h"
 #include "memory.h"
+#include "timer.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -18,6 +19,7 @@ void cmd_help(void) {
     terminal_writestring("  about    - Display OS information\n");
     terminal_writestring("  kernel   - Kernel information (usage: kernel -v or --version)\n");
     terminal_writestring("  mem      - Display memory usage information\n");
+    terminal_writestring("  uptime   - Display system uptime\n");
     terminal_writestring("  color    - Change text color (usage: color <fg> <bg>)\n");
     terminal_writestring("  reboot   - Reboot the system\n");
     terminal_writestring("  shutdown - Shutdown the system\n");
@@ -270,4 +272,114 @@ void cmd_mem(void) {
     terminal_writestring("========================================\n");
     
     terminal_setcolor(label_color);
+}
+
+void cmd_uptime(void) {
+    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    uint8_t value_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    
+    uint32_t ticks = timer_get_ticks();
+    uint32_t seconds = ticks / TIMER_HZ;
+    uint32_t minutes = seconds / 60;
+    uint32_t hours = minutes / 60;
+    uint32_t days = hours / 24;
+    
+    seconds %= 60;
+    minutes %= 60;
+    hours %= 24;
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("System Uptime: ");
+    terminal_setcolor(value_color);
+    
+    char buffer[32];
+    
+    if (days > 0) {
+        int i = 0;
+        uint32_t temp = days;
+        char digits[12];
+        int j = 0;
+        while (temp > 0) {
+            digits[j++] = '0' + (temp % 10);
+            temp /= 10;
+        }
+        while (j > 0) {
+            buffer[i++] = digits[--j];
+        }
+        buffer[i++] = ' ';
+        buffer[i++] = 'd';
+        buffer[i++] = 'a';
+        buffer[i++] = 'y';
+        if (days > 1) buffer[i++] = 's';
+        buffer[i++] = ' ';
+        buffer[i] = '\0';
+        terminal_writestring(buffer);
+    }
+    
+    if (hours > 0 || days > 0) {
+        int i = 0;
+        uint32_t temp = hours;
+        if (temp == 0) {
+            buffer[i++] = '0';
+        } else {
+            char digits[12];
+            int j = 0;
+            while (temp > 0) {
+                digits[j++] = '0' + (temp % 10);
+                temp /= 10;
+            }
+            while (j > 0) {
+                buffer[i++] = digits[--j];
+            }
+        }
+        buffer[i++] = 'h';
+        buffer[i++] = ' ';
+        buffer[i] = '\0';
+        terminal_writestring(buffer);
+    }
+    
+    if (minutes > 0 || hours > 0 || days > 0) {
+        int i = 0;
+        uint32_t temp = minutes;
+        if (temp == 0) {
+            buffer[i++] = '0';
+        } else {
+            char digits[12];
+            int j = 0;
+            while (temp > 0) {
+                digits[j++] = '0' + (temp % 10);
+                temp /= 10;
+            }
+            while (j > 0) {
+                buffer[i++] = digits[--j];
+            }
+        }
+        buffer[i++] = 'm';
+        buffer[i++] = ' ';
+        buffer[i] = '\0';
+        terminal_writestring(buffer);
+    }
+    
+    int i = 0;
+    uint32_t temp = seconds;
+    if (temp == 0) {
+        buffer[i++] = '0';
+    } else {
+        char digits[12];
+        int j = 0;
+        while (temp > 0) {
+            digits[j++] = '0' + (temp % 10);
+            temp /= 10;
+        }
+        while (j > 0) {
+            buffer[i++] = digits[--j];
+        }
+    }
+    buffer[i++] = 's';
+    buffer[i] = '\0';
+    terminal_writestring(buffer);
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("\n");
 }

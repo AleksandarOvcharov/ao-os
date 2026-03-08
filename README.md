@@ -91,6 +91,7 @@ ao-os/
 - `about` - Display OS information with colors
 - `kernel -v` or `kernel --version` - Display kernel version and build information
 - `mem` - Display memory usage statistics
+- `uptime` - Display system uptime
 - `color <fg> <bg>` - Change terminal colors (e.g., `color light_green black`)
 - `reboot` - Reboot the system
 - `shutdown` - Shutdown the system

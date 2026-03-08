@@ -2,6 +2,27 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.3.2] - 2026-03-08
+
+### Added
+- **PIT timer driver**
+  - Programmable Interval Timer (PIT) initialization
+  - System tick counter at 100 Hz
+  - Timer interrupt handling (IRQ0)
+- **Interrupt Descriptor Table (IDT)**
+  - IDT initialization and management
+  - PIC remapping for proper IRQ handling
+  - Interrupt handler stubs in assembly
+- **Uptime command**
+  - `uptime` command to display system uptime
+  - Human-readable format (days, hours, minutes, seconds)
+  - Real-time tick counting
+
+### Changed
+- Version bumped to 0.3.2
+- Kernel now initializes IDT and timer on boot
+- Interrupts enabled for timer functionality
+
 ## [0.3.1] - 2026-03-08
 
 ### Added

@@ -1,12 +1,20 @@
 # AO OS Features
 
-## Current Features (v0.3.1 - Aurora)
+## Current Features (v0.3.2 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
 - **Kernel**: 32-bit protected mode kernel written in C and Assembly
 - **Version System**: Kernel version tracking with build date
 - **Panic System**: Kernel panic handler for fatal errors with colored screen
+- **Interrupt Handling**:
+  - Interrupt Descriptor Table (IDT) with 256 entries
+  - PIC remapping for IRQ handling
+  - Timer interrupt (IRQ0) support
+- **Timer System**:
+  - PIT (Programmable Interval Timer) driver
+  - System tick counter at 100 Hz
+  - Uptime tracking
 - **Memory Management**: 
   - Physical memory manager with 1 MB heap
   - Dynamic memory allocation (kmalloc/kfree)
@@ -42,6 +50,7 @@
 - **about**: Show OS information with colored output
 - **kernel**: Display kernel version information (supports -v and --version flags)
 - **mem**: Display memory usage statistics (total, used, free)
+- **uptime**: Display system uptime in human-readable format
 
 #### Display Commands
 - **clear**: Clear the screen

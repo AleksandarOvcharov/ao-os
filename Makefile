@@ -13,7 +13,7 @@ ISO_DIR = iso
 BOOT_DIR = boot
 KERNEL_DIR = kernel
 
-BOOT_OBJ = $(BUILD_DIR)/boot.o
+BOOT_OBJ = $(BUILD_DIR)/boot.o $(BUILD_DIR)/interrupt.o
 KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/vga.o \
               $(BUILD_DIR)/keyboard.o \
@@ -23,7 +23,9 @@ KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/system.o \
               $(BUILD_DIR)/version.o \
               $(BUILD_DIR)/panic.o \
-              $(BUILD_DIR)/memory.o
+              $(BUILD_DIR)/memory.o \
+              $(BUILD_DIR)/idt.o \
+              $(BUILD_DIR)/timer.o
 
 KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
 ISO_FILE = ao-os.iso
@@ -39,6 +41,9 @@ $(ISO_DIR):
 	mkdir -p $(ISO_DIR)/boot/grub
 
 $(BUILD_DIR)/boot.o: $(BOOT_DIR)/boot.asm | $(BUILD_DIR)
+	$(AS) $(ASFLAGS) $< -o $@
+
+$(BUILD_DIR)/interrupt.o: $(BOOT_DIR)/interrupt.asm | $(BUILD_DIR)
 	$(AS) $(ASFLAGS) $< -o $@
 
 $(BUILD_DIR)/kernel.o: $(KERNEL_DIR)/kernel.c | $(BUILD_DIR)
@@ -71,6 +76,12 @@ $(BUILD_DIR)/panic.o: $(KERNEL_DIR)/panic.c | $(BUILD_DIR)
 $(BUILD_DIR)/memory.o: $(KERNEL_DIR)/memory/memory.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/idt.o: $(KERNEL_DIR)/idt.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/timer.o: $(KERNEL_DIR)/drivers/timer.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(KERNEL_BIN): $(BOOT_OBJ) $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
@@ -83,11 +94,14 @@ $(ISO_FILE): $(KERNEL_BIN) | $(ISO_DIR)
 	echo '    multiboot /boot/ao-os.bin' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '    boot' >> $(ISO_DIR)/boot/grub/grub.cfg
 	echo '}' >> $(ISO_DIR)/boot/grub/grub.cfg
-	grub-mkrescue -o $(ISO_FILE) $(ISO_DIR)
+	grub-mkrescue -o $(ISO_FILE) $(ISO_DIR) 2>&1 | grep -v "xorriso"
 
 iso: $(ISO_FILE)
 
-run: $(ISO_FILE)
+run: $(KERNEL_BIN)
+	qemu-system-i386 -kernel $(KERNEL_BIN)
+
+run-iso: $(ISO_FILE)
 	qemu-system-i386 -cdrom $(ISO_FILE)
 
 clean:

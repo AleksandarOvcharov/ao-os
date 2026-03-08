@@ -10,5 +10,6 @@ void cmd_shutdown(void);
 void cmd_color(const char* args);
 void cmd_kernel(const char* args);
 void cmd_mem(void);
+void cmd_uptime(void);
 
 #endif
