@@ -2,6 +2,30 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.5.0] - 2026-03-08
+
+### Added
+- **Terminal scrollback buffer**
+  - 1000 lines of history (80x1000 character buffer)
+  - PageUp to scroll up (1 line at a time)
+  - PageDown to scroll down (1 line at a time)
+  - View previous output that scrolled off screen
+  - Automatic scroll to bottom when typing
+  - Color preservation in scrollback
+  - Ring buffer when history limit reached
+
+### Changed
+- Version bumped to 0.5.0 (major feature: scrollback)
+- VGA driver refactored to use buffer-render architecture
+- Terminal no longer writes directly to VGA memory
+- All output goes through terminal buffer first
+
+### Technical
+- Separated display buffer from VGA memory
+- Implemented terminal_render() for buffer-to-VGA copying
+- Added scroll_offset tracking for view position
+- Automatic buffer shifting when history limit reached
+
 ## [0.4.2] - 2026-03-08
 
 ### Added

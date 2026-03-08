@@ -62,6 +62,8 @@ unsigned char keyboard_getchar(void) {
             case 0x50: return KEY_DOWN;
             case 0x4B: return KEY_LEFT;
             case 0x4D: return KEY_RIGHT;
+            case 0x49: return KEY_PAGEUP;
+            case 0x51: return KEY_PAGEDOWN;
             default: return 0;
         }
     }

@@ -170,6 +170,16 @@ void shell_run(void) {
             continue;
         }
         
+        if (c == KEY_PAGEUP) {
+            terminal_scroll_up();
+            continue;
+        }
+        
+        if (c == KEY_PAGEDOWN) {
+            terminal_scroll_down();
+            continue;
+        }
+        
         if (c == KEY_UP) {
             if (history_count > 0) {
                 if (!browsing_history) {

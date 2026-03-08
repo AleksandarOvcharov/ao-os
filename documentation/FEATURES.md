@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.4.2 - Aurora)
+## Current Features (v0.5.0 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -31,6 +31,11 @@
 - **Color Support**: 16 foreground and 16 background colors
 - **Hardware Cursor**: Blinking cursor that follows typing in real-time
 - **Scrolling**: Automatic screen scrolling when text reaches bottom
+- **Terminal Scrollback**: 
+  - 1000 lines of history buffer
+  - PageUp/PageDown to scroll through previous output
+  - Automatic scroll to bottom when typing
+  - Color preservation in history
 - **Special Characters**: Support for newline, tab, and backspace
 - **Serial Console**: COM1 serial port output for debugging (use with `qemu -serial stdio`)
 

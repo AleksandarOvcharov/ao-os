@@ -4,10 +4,10 @@ A basic x86 operating system written in C and Assembly with a terminal-based int
 
 ## Features
 
-- Custom bootloader (Multiboot-compliant)
-- 32-bit protected mode kernel
-- VGA text mode display driver with **color support**
-- **Blinking cursor** that shows where you're typing
+- **Custom Bootloader**: Multiboot-compliant bootloader
+- **VGA Text Mode**: 80x25 color text display with 1000-line scrollback (PageUp/PageDown)
+- **Keyboard Driver**: PS/2 keyboard support with shift key handling
+- **Interactive Shell**: Command-line interface with command parsing
 - PS/2 keyboard driver with shift key support
 - Interactive terminal/shell interface with colored prompts
 - Built-in commands: help, clear, echo, about, color, reboot, shutdown

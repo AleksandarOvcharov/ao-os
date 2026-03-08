@@ -26,6 +26,10 @@ enum vga_color {
 static const size_t VGA_WIDTH = 80;
 static const size_t VGA_HEIGHT = 25;
 
+#define TERM_WIDTH 80
+#define TERM_HEIGHT 25
+#define TERM_HISTORY 1000
+
 uint8_t vga_entry_color(enum vga_color fg, enum vga_color bg);
 void terminal_initialize(void);
 void terminal_setcolor(uint8_t color);
@@ -38,5 +42,8 @@ void terminal_backspace(void);
 void terminal_show_cursor(void);
 void terminal_hide_cursor(void);
 void terminal_update_cursor(void);
+void terminal_render(void);
+void terminal_scroll_up(void);
+void terminal_scroll_down(void);
 
 #endif
