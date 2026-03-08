@@ -192,3 +192,21 @@ void terminal_hide_cursor(void) {
     outb(0x3D4, 0x0A);
     outb(0x3D5, 0x20);
 }
+
+int terminal_get_row(void) {
+    return current_line;
+}
+
+int terminal_get_column(void) {
+    return terminal_column;
+}
+
+void terminal_set_cursor(int row, int col) {
+    if (row >= 0 && row < TERM_HISTORY) {
+        current_line = row;
+    }
+    if (col >= 0 && col < TERM_WIDTH) {
+        terminal_column = col;
+    }
+    terminal_update_cursor();
+}

@@ -45,5 +45,8 @@ void terminal_update_cursor(void);
 void terminal_render(void);
 void terminal_scroll_up(void);
 void terminal_scroll_down(void);
+int terminal_get_row(void);
+int terminal_get_column(void);
+void terminal_set_cursor(int row, int col);
 
 #endif

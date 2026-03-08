@@ -2,6 +2,31 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.6.1] - 2026-03-08
+
+### Added
+- **Enhanced Text Editor**
+  - Live status bar showing cursor position (line:column)
+  - Character counter (current/max)
+  - Save indicator (shows "SAVED" when file is saved)
+  - Ctrl+S to save without exiting
+  - Beautiful box-drawing UI with borders
+  - Real-time position tracking
+  - Buffer usage indicator
+  - Professional layout with help text
+
+### Changed
+- Editor now shows line and column numbers in real-time
+- Status bar updates on every keystroke
+- Improved visual design with Unicode box characters
+- Better user feedback for save operations
+
+### Technical
+- Added `terminal_get_row()`, `terminal_get_column()`, `terminal_set_cursor()` functions
+- Implemented live cursor position tracking
+- Status bar rendering system
+- Ctrl+S keyboard shortcut support
+
 ## [0.6.0] - 2026-03-08
 
 ### Added

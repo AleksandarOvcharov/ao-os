@@ -209,8 +209,6 @@ int fat12_create(const char* name, const char* data, uint32_t size) {
         fat_filename[11] = '\0';
         
         if (fat12_compare_filename(fat_filename, name)) {
-            terminal_writestring("\n");
-            klog_info("File exists, updating...");
             uint16_t cluster = root_dir[i].first_cluster_low;
             
             if (cluster >= 2) {

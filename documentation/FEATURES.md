@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.6.0 - Aurora)
+## Current Features (v0.6.1 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -102,10 +102,16 @@
 #### Filesystem Commands
 - **ls**: List all files in RAM filesystem with sizes
 - **cat**: Display file contents (usage: `cat <filename>`)
-- **edit**: Simple text editor (usage: `edit <filename>`)
+- **edit**: Enhanced text editor (usage: `edit <filename>`)
+  - Live status bar with cursor position (line:column)
+  - Character counter (current/max buffer usage)
+  - Save indicator - shows "SAVED" when file is saved
+  - Ctrl+S to save without exiting
+  - ESC to save and exit
+  - Beautiful box-drawing UI with borders
   - Type text, Enter for newline, Backspace to delete
   - PageUp/PageDown to scroll through content
-  - ESC to save and exit
+  - Real-time position tracking
   - 512 byte limit
 - **write**: Create or modify files (usage: `write <filename> <content>`)
 - **rm**: Remove files (usage: `rm <filename>`)

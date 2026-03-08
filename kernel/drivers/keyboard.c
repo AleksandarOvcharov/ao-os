@@ -18,10 +18,12 @@ static const char scancode_to_ascii_shift[] = {
 };
 
 static int shift_pressed = 0;
+static int ctrl_pressed = 0;
 static int extended_key = 0;
 
 void keyboard_init(void) {
     shift_pressed = 0;
+    ctrl_pressed = 0;
     extended_key = 0;
 }
 
@@ -50,6 +52,15 @@ unsigned char keyboard_getchar(void) {
         return 0;
     }
     
+    if (scancode == 0x1D) {
+        ctrl_pressed = 1;
+        return 0;
+    }
+    if (scancode == 0x9D) {
+        ctrl_pressed = 0;
+        return 0;
+    }
+    
     if (scancode & 0x80) {
         extended_key = 0;
         return 0;
@@ -69,11 +80,21 @@ unsigned char keyboard_getchar(void) {
     }
     
     if (scancode < sizeof(scancode_to_ascii)) {
+        char ch;
         if (shift_pressed) {
-            return scancode_to_ascii_shift[scancode];
+            ch = scancode_to_ascii_shift[scancode];
         } else {
-            return scancode_to_ascii[scancode];
+            ch = scancode_to_ascii[scancode];
         }
+        
+        if (ctrl_pressed && ch >= 'a' && ch <= 'z') {
+            return ch - 'a' + 1;
+        }
+        if (ctrl_pressed && ch >= 'A' && ch <= 'Z') {
+            return ch - 'A' + 1;
+        }
+        
+        return ch;
     }
     
     return 0;
