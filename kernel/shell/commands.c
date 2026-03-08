@@ -6,6 +6,7 @@
 #include "memory.h"
 #include "timer.h"
 #include "cpu.h"
+#include "shell.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -130,7 +131,7 @@ void cmd_color(const char* args) {
     
     enum vga_color fg = parse_color(fg_name);
     
-    terminal_setcolor(vga_entry_color(fg, VGA_COLOR_BLACK));
+    shell_set_color(vga_entry_color(fg, VGA_COLOR_BLACK));
     terminal_writestring("Color changed successfully!\n");
 }
 

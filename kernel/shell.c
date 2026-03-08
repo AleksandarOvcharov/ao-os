@@ -14,17 +14,23 @@ static char history[HISTORY_SIZE][MAX_COMMAND_LENGTH];
 static int history_count = 0;
 static int history_index = 0;
 static int browsing_history = 0;
+static uint8_t user_color = 0;
 
 void shell_print_prompt(void) {
     uint8_t prompt_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
     terminal_setcolor(prompt_color);
     terminal_writestring("AO-OS> ");
-    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+    terminal_setcolor(user_color);
 }
 
 void shell_clear_command(void) {
     memset(command_buffer, 0, MAX_COMMAND_LENGTH);
     command_index = 0;
+}
+
+void shell_set_color(uint8_t color) {
+    user_color = color;
+    terminal_setcolor(color);
 }
 
 static void shell_add_to_history(const char* cmd) {
@@ -122,6 +128,7 @@ void shell_init(void) {
     
     uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
     uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    user_color = normal_color;
     
     terminal_setcolor(title_color);
     terminal_writestring("========================================\n");
