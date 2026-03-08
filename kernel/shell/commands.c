@@ -11,6 +11,8 @@
 #include "serial.h"
 #include "fs.h"
 #include "editor.h"
+#include "installer.h"
+#include "keyboard.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -28,6 +30,7 @@ void cmd_help(void) {
     terminal_writestring("  diskinfo - Display disk information\n");
     terminal_writestring("  sconsole - Serial console status (usage: sconsole --status)\n");
     terminal_writestring("  checkfs  - Display current filesystem type\n");
+    terminal_writestring("  install  - Install AO OS to disk\n");
     terminal_writestring("  ls       - List files in filesystem\n");
     terminal_writestring("  cat      - Display file contents (usage: cat <filename>)\n");
     terminal_writestring("  edit     - Edit file (usage: edit <filename>)\n");
@@ -802,4 +805,31 @@ void cmd_checkfs(void) {
     terminal_writestring("========================================\n");
     
     terminal_setcolor(label_color);
+}
+
+void cmd_install(void) {
+    uint8_t warning_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+    uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    
+    terminal_setcolor(warning_color);
+    terminal_writestring("\n");
+    terminal_writestring("WARNING: This will erase all data on the disk!\n");
+    terminal_writestring("\n");
+    terminal_setcolor(normal_color);
+    terminal_writestring("Are you sure you want to continue? (y/n): ");
+    
+    unsigned char key = 0;
+    while (1) {
+        key = keyboard_getchar();
+        if (key == 'y' || key == 'Y') {
+            terminal_writestring("y\n\n");
+            break;
+        } else if (key == 'n' || key == 'N') {
+            terminal_writestring("n\n");
+            terminal_writestring("Installation cancelled.\n");
+            return;
+        }
+    }
+    
+    installer_run();
 }

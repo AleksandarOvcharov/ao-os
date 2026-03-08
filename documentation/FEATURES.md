@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.6.1 - Aurora)
+## Current Features (v0.7.0 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -118,6 +118,13 @@
 - **touch**: Create empty files (usage: `touch <filename>`)
 
 #### System Commands
+- **install**: Install AO OS to disk (with confirmation prompt)
+  - Detects ATA disk
+  - Prepares disk (clears sectors)
+  - Formats FAT12 filesystem
+  - Installs kernel to disk
+  - Installs bootloader to MBR
+  - Interactive y/n confirmation
 - **reboot**: Restart the computer using keyboard controller reset
 - **shutdown**: Power off the system using ACPI (works in QEMU and some VMs)
 

@@ -21,5 +21,6 @@ void cmd_rm(const char* args);
 void cmd_touch(const char* args);
 void cmd_edit(const char* args);
 void cmd_checkfs(void);
+void cmd_install(void);
 
 #endif

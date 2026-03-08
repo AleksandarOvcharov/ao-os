@@ -2,6 +2,46 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.7.0] - 2026-03-08
+
+### Added
+- **OS Installer System**
+  - Minimal installer for installing AO OS to disk
+  - Disk detection and validation
+  - Disk preparation (clearing sectors)
+  - FAT12 filesystem formatting
+  - Kernel installation to disk
+  - Bootloader installation
+  - Interactive confirmation prompt
+  - Colored status messages
+  - Step-by-step installation process
+  - `install` shell command
+
+### Features
+- **Installer Components**:
+  - `installer_detect_disk()` - Detects ATA disk
+  - `installer_prepare_disk()` - Clears first 10 sectors
+  - `installer_format_filesystem()` - Creates FAT12 filesystem structure
+  - `installer_install_kernel()` - Writes kernel to disk
+  - `installer_install_bootloader()` - Installs bootloader to MBR
+  - `installer_run()` - Orchestrates full installation
+
+### Technical
+- Created `kernel/installer/` directory for installer code
+- Added `installer.h` header with installer API
+- Implemented complete FAT12 filesystem creation
+- Boot sector with BPB (BIOS Parameter Block)
+- Dual FAT tables (FAT1 and FAT2)
+- Root directory initialization
+- User confirmation system with keyboard input
+- Error handling for all installation steps
+
+### Structure
+- Organized installer in separate module
+- Clean separation of concerns
+- Modular installation steps
+- Comprehensive error reporting
+
 ## [0.6.1] - 2026-03-08
 
 ### Added
