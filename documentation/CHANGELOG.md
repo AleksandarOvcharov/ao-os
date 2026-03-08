@@ -2,6 +2,19 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.3.1] - 2026-03-08
+
+### Added
+- **Command history**
+  - Up/Down arrow key navigation through command history
+  - Stores last 10 commands
+  - Prevents duplicate consecutive commands in history
+  - Arrow key detection in keyboard driver (KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT)
+
+### Changed
+- Version bumped to 0.3.1
+- Enhanced keyboard driver to detect extended keys (arrow keys)
+
 ## [0.3.0] - 2026-03-08
 
 ### Added

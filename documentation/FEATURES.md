@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.3.0 - Aurora)
+## Current Features (v0.3.1 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -23,11 +23,13 @@
 ### Input
 - **Keyboard Driver**: PS/2 keyboard support
 - **Shift Key**: Proper handling of shift key for uppercase and symbols
+- **Arrow Keys**: Detection of arrow keys for navigation
 - **Scancode Translation**: ASCII conversion from keyboard scancodes
 
 ### Shell/Terminal
 - **Interactive Shell**: Command-line interface with prompt
 - **Command Parsing**: Parse commands and arguments with flag support
+- **Command History**: Navigate through last 10 commands with Up/Down arrows
 - **Colored Prompt**: Green prompt for better visibility
 - **Error Handling**: Red error messages for invalid commands
 - **Command Buffer**: 256-character command buffer

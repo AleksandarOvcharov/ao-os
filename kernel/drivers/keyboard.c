@@ -18,12 +18,14 @@ static const char scancode_to_ascii_shift[] = {
 };
 
 static int shift_pressed = 0;
+static int extended_key = 0;
 
 void keyboard_init(void) {
     shift_pressed = 0;
+    extended_key = 0;
 }
 
-char keyboard_getchar(void) {
+unsigned char keyboard_getchar(void) {
     unsigned char status;
     unsigned char scancode;
     
@@ -33,6 +35,11 @@ char keyboard_getchar(void) {
     }
     
     scancode = inb(0x60);
+    
+    if (scancode == 0xE0) {
+        extended_key = 1;
+        return 0;
+    }
     
     if (scancode == 0x2A || scancode == 0x36) {
         shift_pressed = 1;
@@ -44,7 +51,19 @@ char keyboard_getchar(void) {
     }
     
     if (scancode & 0x80) {
+        extended_key = 0;
         return 0;
+    }
+    
+    if (extended_key) {
+        extended_key = 0;
+        switch (scancode) {
+            case 0x48: return KEY_UP;
+            case 0x50: return KEY_DOWN;
+            case 0x4B: return KEY_LEFT;
+            case 0x4D: return KEY_RIGHT;
+            default: return 0;
+        }
     }
     
     if (scancode < sizeof(scancode_to_ascii)) {
@@ -60,7 +79,7 @@ char keyboard_getchar(void) {
 
 void keyboard_wait_for_key(void) {
     while (1) {
-        char c = keyboard_getchar();
+        unsigned char c = keyboard_getchar();
         if (c != 0) {
             return;
         }
