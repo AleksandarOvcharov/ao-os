@@ -14,5 +14,11 @@ void cmd_uptime(void);
 void cmd_sysinfo(void);
 void cmd_diskinfo(void);
 void cmd_sconsole(const char* args);
+void cmd_ls(void);
+void cmd_cat(const char* args);
+void cmd_write(const char* args);
+void cmd_rm(const char* args);
+void cmd_touch(const char* args);
+void cmd_edit(const char* args);
 
 #endif

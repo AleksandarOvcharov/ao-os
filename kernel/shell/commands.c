@@ -9,6 +9,8 @@
 #include "shell.h"
 #include "ata.h"
 #include "serial.h"
+#include "ramfs.h"
+#include "editor.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -25,6 +27,12 @@ void cmd_help(void) {
     terminal_writestring("  sysinfo  - Display system information\n");
     terminal_writestring("  diskinfo - Display disk information\n");
     terminal_writestring("  sconsole - Serial console status (usage: sconsole --status)\n");
+    terminal_writestring("  ls       - List files in RAM filesystem\n");
+    terminal_writestring("  cat      - Display file contents (usage: cat <filename>)\n");
+    terminal_writestring("  edit     - Edit file (usage: edit <filename>)\n");
+    terminal_writestring("  write    - Write to file (usage: write <filename> <content>)\n");
+    terminal_writestring("  rm       - Remove file (usage: rm <filename>)\n");
+    terminal_writestring("  touch    - Create empty file (usage: touch <filename>)\n");
     terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  uptime   - Display system uptime\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
@@ -576,4 +584,185 @@ void cmd_sconsole(const char* args) {
         terminal_setcolor(label_color);
         terminal_writestring("Usage: sconsole --status\n");
     }
+}
+
+void cmd_ls(void) {
+    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t file_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    
+    int count = ramfs_get_file_count();
+    ramfs_file_t* files = ramfs_get_files();
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("Files in RAM filesystem:\n");
+    terminal_setcolor(label_color);
+    
+    if (count == 0) {
+        terminal_writestring("  (empty)\n");
+        return;
+    }
+    
+    for (int i = 0; i < MAX_FILES; i++) {
+        if (files[i].used) {
+            terminal_writestring("  ");
+            terminal_setcolor(file_color);
+            terminal_writestring(files[i].name);
+            terminal_setcolor(label_color);
+            terminal_writestring(" (");
+            
+            char size_str[16];
+            uint32_t size = files[i].size;
+            int j = 0;
+            if (size == 0) {
+                size_str[j++] = '0';
+            } else {
+                char digits[12];
+                int k = 0;
+                while (size > 0) {
+                    digits[k++] = '0' + (size % 10);
+                    size /= 10;
+                }
+                while (k > 0) {
+                    size_str[j++] = digits[--k];
+                }
+            }
+            size_str[j] = '\0';
+            
+            terminal_writestring(size_str);
+            terminal_writestring(" bytes)\n");
+        }
+    }
+}
+
+void cmd_cat(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: cat <filename>\n");
+        return;
+    }
+    
+    char buffer[MAX_FILESIZE];
+    uint32_t size;
+    
+    if (ramfs_read(args, buffer, &size) == 0) {
+        for (uint32_t i = 0; i < size; i++) {
+            terminal_putchar(buffer[i]);
+        }
+        terminal_writestring("\n");
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Error: File not found: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(label_color);
+    }
+}
+
+void cmd_write(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: write <filename> <content>\n");
+        return;
+    }
+    
+    char filename[MAX_FILENAME];
+    int i = 0, j = 0;
+    
+    while (args[i] && args[i] != ' ' && j < MAX_FILENAME - 1) {
+        filename[j++] = args[i++];
+    }
+    filename[j] = '\0';
+    
+    while (args[i] == ' ') i++;
+    
+    if (!args[i]) {
+        terminal_writestring("Usage: write <filename> <content>\n");
+        return;
+    }
+    
+    const char* content = &args[i];
+    uint32_t size = strlen(content);
+    
+    if (size > MAX_FILESIZE) {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Error: Content too large (max 512 bytes)\n");
+        uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(label_color);
+        return;
+    }
+    
+    if (ramfs_create(filename, content, size) == 0) {
+        uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        terminal_setcolor(success_color);
+        terminal_writestring("File written: ");
+        terminal_writestring(filename);
+        terminal_writestring("\n");
+        uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(label_color);
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Error: Could not write file (filesystem full?)\n");
+        uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(label_color);
+    }
+}
+
+void cmd_rm(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: rm <filename>\n");
+        return;
+    }
+    
+    if (ramfs_delete(args) == 0) {
+        uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        terminal_setcolor(success_color);
+        terminal_writestring("File removed: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(label_color);
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Error: File not found: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(label_color);
+    }
+}
+
+void cmd_touch(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: touch <filename>\n");
+        return;
+    }
+    
+    if (ramfs_create(args, "", 0) == 0) {
+        uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+        terminal_setcolor(success_color);
+        terminal_writestring("File created: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(label_color);
+    } else {
+        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+        terminal_setcolor(error_color);
+        terminal_writestring("Error: Could not create file (filesystem full or file exists)\n");
+        uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(label_color);
+    }
+}
+
+void cmd_edit(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: edit <filename>\n");
+        return;
+    }
+    
+    editor_open(args);
 }

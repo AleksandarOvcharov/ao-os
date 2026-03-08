@@ -107,6 +107,12 @@ ao-os/
 - `sysinfo` - Display system information (CPU, RAM, uptime)
 - `diskinfo` - Display disk controller information
 - `sconsole --status` - Display serial console status
+- `ls` - List files in RAM filesystem
+- `cat <filename>` - Display file contents
+- `edit <filename>` - Edit file with simple text editor (ESC to save)
+- `write <filename> <content>` - Create or modify a file
+- `rm <filename>` - Remove a file
+- `touch <filename>` - Create an empty file
 - `mem` - Display memory usage statistics
 - `uptime` - Display system uptime
 - `color <fg>` - Change text color (e.g., `color light_green`)

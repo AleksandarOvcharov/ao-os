@@ -99,6 +99,18 @@ void shell_execute_command(const char* cmd) {
         cmd_diskinfo();
     } else if (strncmp(cmd, "sconsole", cmd_len) == 0 && cmd_len == 8) {
         cmd_sconsole(args);
+    } else if (strncmp(cmd, "ls", cmd_len) == 0 && cmd_len == 2) {
+        cmd_ls();
+    } else if (strncmp(cmd, "cat", cmd_len) == 0 && cmd_len == 3) {
+        cmd_cat(args);
+    } else if (strncmp(cmd, "edit", cmd_len) == 0 && cmd_len == 4) {
+        cmd_edit(args);
+    } else if (strncmp(cmd, "write", cmd_len) == 0 && cmd_len == 5) {
+        cmd_write(args);
+    } else if (strncmp(cmd, "rm", cmd_len) == 0 && cmd_len == 2) {
+        cmd_rm(args);
+    } else if (strncmp(cmd, "touch", cmd_len) == 0 && cmd_len == 5) {
+        cmd_touch(args);
     } else if (strncmp(cmd, "mem", cmd_len) == 0 && cmd_len == 3) {
         cmd_mem();
     } else if (strncmp(cmd, "uptime", cmd_len) == 0 && cmd_len == 6) {

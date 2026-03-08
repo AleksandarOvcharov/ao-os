@@ -7,6 +7,7 @@
 #include "klog.h"
 #include "serial.h"
 #include "ata.h"
+#include "ramfs.h"
 
 void kernel_main(void) {
     terminal_initialize();
@@ -26,6 +27,10 @@ void kernel_main(void) {
     
     klog_info("Initializing memory manager...");
     memory_init();
+    timer_wait(30);
+    
+    klog_info("Initializing RAM filesystem...");
+    ramfs_init();
     timer_wait(30);
     
     klog_info("Initializing ATA disk driver...");

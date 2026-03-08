@@ -2,6 +2,68 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.4.2] - 2026-03-08
+
+### Added
+- **Simple text editor**
+  - Edit files directly in the OS with `edit <filename>`
+  - Maximum 512 bytes (same as ramfs file limit)
+  - Basic operations: type, Enter for newline, Backspace to delete
+  - ESC to save and exit
+  - Loads existing files for editing
+  - Perfect for testing filesystem and keyboard input
+  - No arrow keys, no menus - just simple text editing
+
+### Changed
+- Version bumped to 0.4.2
+- Updated help command with edit
+
+## [0.4.1] - 2026-03-08
+
+### Added
+- **rm command**
+  - Remove files from RAM filesystem
+  - Usage: `rm <filename>`
+  - Important for testing file slot reuse
+- **touch command**
+  - Create empty files
+  - Usage: `touch <filename>`
+  - Cleaner than using `write` for empty files
+
+### Improved
+- **RAM Filesystem (ramfs)**
+  - Automatic null terminator added after file data (if space available)
+  - Better text file handling for `cat` command
+  - Size overflow properly validated (returns error for >512 bytes)
+  - File overwrite works correctly when writing to existing files
+
+### Changed
+- Version bumped to 0.4.1
+- Updated help command with rm and touch
+
+## [0.4.0] - 2026-03-08
+
+### Added
+- **RAM Filesystem (ramfs)**
+  - In-memory filesystem with 16 file slots
+  - Maximum file size: 512 bytes
+  - Maximum filename length: 32 characters
+  - File operations: create, read, delete, list
+- **ls command**
+  - List all files in RAM filesystem
+  - Shows filename and size in bytes
+- **cat command**
+  - Display file contents
+  - Usage: `cat <filename>`
+- **write command**
+  - Create or overwrite files
+  - Usage: `write <filename> <content>`
+  - Content can include spaces
+
+### Changed
+- Version bumped to 0.4.0 (major feature: filesystem)
+- Updated help command with filesystem commands
+
 ## [0.3.5] - 2026-03-08
 
 ### Added

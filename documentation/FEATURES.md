@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.3.5 - Aurora)
+## Current Features (v0.4.2 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -40,6 +40,14 @@
   - LBA28 addressing (up to 128GB disks)
   - Error detection and status checking
   - Foundation for filesystem implementation
+- **RAM Filesystem (ramfs)**:
+  - In-memory filesystem (data is lost on reboot)
+  - Maximum of 16 files
+  - Maximum file size: 512 bytes
+  - Maximum filename length: 31 characters + null terminator
+  - Supports basic operations: create, write, read, list, delete
+  - Automatic null terminator for text files
+  - Designed as a simple temporary storage layer before disk-backed filesystems
 
 ### Input
 - **Keyboard Driver**: PS/2 keyboard support
@@ -72,6 +80,17 @@
 - **clear**: Clear the screen
 - **echo**: Print text to the screen
 - **color**: Change text foreground color (16 colors available)
+
+#### Filesystem Commands
+- **ls**: List all files in RAM filesystem with sizes
+- **cat**: Display file contents (usage: `cat <filename>`)
+- **edit**: Simple text editor (usage: `edit <filename>`)
+  - Type text, Enter for newline, Backspace to delete
+  - ESC to save and exit
+  - 512 byte limit
+- **write**: Create or modify files (usage: `write <filename> <content>`)
+- **rm**: Remove files (usage: `rm <filename>`)
+- **touch**: Create empty files (usage: `touch <filename>`)
 
 #### System Commands
 - **reboot**: Restart the computer using keyboard controller reset
