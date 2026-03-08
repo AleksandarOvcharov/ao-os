@@ -1,5 +1,6 @@
 #include "klog.h"
 #include "vga.h"
+#include "serial.h"
 
 static const char* log_level_strings[] = {
     "[INFO]  ",
@@ -18,6 +19,10 @@ static uint8_t log_level_colors[] = {
 void klog(log_level_t level, const char* message) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     uint8_t saved_color = old_color;
+    
+    serial_writestring(log_level_strings[level]);
+    serial_writestring(message);
+    serial_writestring("\n");
     
     terminal_setcolor(log_level_colors[level]);
     terminal_writestring(log_level_strings[level]);

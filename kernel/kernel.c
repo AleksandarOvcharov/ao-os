@@ -5,9 +5,11 @@
 #include "idt.h"
 #include "timer.h"
 #include "klog.h"
+#include "serial.h"
 
 void kernel_main(void) {
     terminal_initialize();
+    serial_init();
     
     klog_info("AO OS Kernel starting...");
     

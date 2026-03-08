@@ -12,6 +12,7 @@ A basic x86 operating system written in C and Assembly with a terminal-based int
 - Interactive terminal/shell interface with colored prompts
 - Built-in commands: help, clear, echo, about, color, reboot, shutdown
 - Modular code structure for easy expansion
+- Serial console output for debugging
 
 ## Requirements
 
@@ -22,13 +23,26 @@ A basic x86 operating system written in C and Assembly with a terminal-based int
 - xorriso (for ISO creation)
 - QEMU (for testing)
 
-## Building
+## Building and Running
+
+### Prerequisites
+
+- `i686-elf-gcc` cross-compiler
+- `nasm` assembler
+- `grub-mkrescue` for creating bootable ISO
+- `qemu-system-i386` for testing
+
+### Build Commands
 
 ```bash
-make
+make          # Build the OS
+make run      # Run in QEMU (with serial console output)
+make clean    # Clean build files
 ```
 
-This will create `ao-os.iso` in the project root.
+### Debugging
+
+The kernel outputs debug logs to both VGA display and serial console (COM1). When running with `make run`, kernel logs will appear in your terminal via QEMU's serial output. This is very useful for debugging kernel initialization and tracking system events.
 
 ## Running
 

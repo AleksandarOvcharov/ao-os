@@ -32,6 +32,7 @@
 - **Hardware Cursor**: Blinking cursor that follows typing in real-time
 - **Scrolling**: Automatic screen scrolling when text reaches bottom
 - **Special Characters**: Support for newline, tab, and backspace
+- **Serial Console**: COM1 serial port output for debugging (use with `qemu -serial stdio`)
 
 ### Input
 - **Keyboard Driver**: PS/2 keyboard support

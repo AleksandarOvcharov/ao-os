@@ -27,7 +27,8 @@ KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/idt.o \
               $(BUILD_DIR)/timer.o \
               $(BUILD_DIR)/cpu.o \
-              $(BUILD_DIR)/klog.o
+              $(BUILD_DIR)/klog.o \
+              $(BUILD_DIR)/serial.o
 
 KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
 ISO_FILE = ao-os.iso
@@ -90,6 +91,9 @@ $(BUILD_DIR)/cpu.o: $(KERNEL_DIR)/cpu.c | $(BUILD_DIR)
 $(BUILD_DIR)/klog.o: $(KERNEL_DIR)/klog.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/serial.o: $(KERNEL_DIR)/drivers/serial.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(KERNEL_BIN): $(BOOT_OBJ) $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
@@ -107,10 +111,10 @@ $(ISO_FILE): $(KERNEL_BIN) | $(ISO_DIR)
 iso: $(ISO_FILE)
 
 run: $(KERNEL_BIN)
-	qemu-system-i386 -kernel $(KERNEL_BIN)
+	qemu-system-i386 -kernel $(KERNEL_BIN) -serial stdio
 
 run-iso: $(ISO_FILE)
-	qemu-system-i386 -cdrom $(ISO_FILE)
+	qemu-system-i386 -cdrom $(ISO_FILE) -serial stdio
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO_FILE)

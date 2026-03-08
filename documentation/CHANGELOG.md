@@ -10,6 +10,12 @@ All notable changes to AO OS will be documented in this file.
   - Colored output for each log level (green, yellow, red, cyan)
   - Helper functions: klog_info(), klog_warn(), klog_error(), klog_debug()
   - Used during kernel initialization for debugging
+  - Outputs to both VGA and serial console
+- **Serial console (COM1)**
+  - COM1 serial port driver for debugging
+  - Serial output integrated with klog system
+  - Use `qemu-system-i386 -serial stdio` to see kernel logs in terminal
+  - Very useful for kernel debugging
 - **Sysinfo command**
   - Display CPU vendor using CPUID instruction
   - Show RAM size
@@ -19,6 +25,7 @@ All notable changes to AO OS will be documented in this file.
 ### Changed
 - Version bumped to 0.3.3
 - Kernel initialization now shows detailed boot messages with klog
+- QEMU run commands now include `-serial stdio` for serial console output
 
 ## [0.3.2] - 2026-03-08
 
