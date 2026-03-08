@@ -7,6 +7,7 @@ A basic x86 operating system written in C and Assembly with a terminal-based int
 - Custom bootloader (Multiboot-compliant)
 - 32-bit protected mode kernel
 - VGA text mode display driver with **color support**
+- **Blinking cursor** that shows where you're typing
 - PS/2 keyboard driver with shift key support
 - Interactive terminal/shell interface with colored prompts
 - Built-in commands: help, clear, echo, about, color, reboot, shutdown
@@ -71,6 +72,11 @@ ao-os/
 │   ├── commands.h
 │   ├── system.h
 │   └── io.h
+├── documentation/     # Documentation files
+│   ├── BUILD.md
+│   ├── FEATURES.md
+│   ├── CHANGELOG.md
+│   └── CONTRIBUTING.md
 ├── build/             # Build output (generated)
 ├── iso/               # ISO creation directory (generated)
 ├── linker.ld          # Linker script
@@ -91,6 +97,14 @@ ao-os/
 
 black, blue, green, cyan, red, magenta, brown, light_grey, dark_grey, 
 light_blue, light_green, light_cyan, light_red, light_magenta, yellow, white
+
+## Documentation
+
+For detailed documentation, see the `documentation/` folder:
+- **BUILD.md** - Detailed build instructions and toolchain setup
+- **FEATURES.md** - Comprehensive feature list and roadmap
+- **CHANGELOG.md** - Version history and changes
+- **CONTRIBUTING.md** - Guidelines for contributing
 
 ## License
 
