@@ -5,7 +5,8 @@
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
 - **Kernel**: 32-bit protected mode kernel written in C and Assembly
-- **Version System**: Kernel version tracking with build date/time
+- **Version System**: Kernel version tracking with build date
+- **Panic System**: Kernel panic handler for fatal errors with colored screen
 - **Memory Management**: Basic stack setup and memory initialization
 
 ### Display
@@ -49,9 +50,10 @@
   - Drivers (VGA, Keyboard)
   - Libraries (String utilities)
   - Shell (Command parsing and execution)
-  - System (Hardware control)
+  - System (Hardware control, Panic handler)
 - **Header Files**: Clean API separation
 - **Build System**: Automated build with Makefile
+- **Error Handling**: Kernel panic system for fatal errors
 
 ## Planned Features
 
