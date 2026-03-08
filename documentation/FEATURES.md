@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.5.0 - Aurora)
+## Current Features (v0.5.1 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -91,6 +91,7 @@
 - **cat**: Display file contents (usage: `cat <filename>`)
 - **edit**: Simple text editor (usage: `edit <filename>`)
   - Type text, Enter for newline, Backspace to delete
+  - PageUp/PageDown to scroll through content
   - ESC to save and exit
   - 512 byte limit
 - **write**: Create or modify files (usage: `write <filename> <content>`)

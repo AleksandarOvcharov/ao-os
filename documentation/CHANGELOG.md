@@ -2,6 +2,19 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.5.1] - 2026-03-08
+
+### Added
+- **Editor scrollback support**
+  - PageUp/PageDown scrolling in text editor
+  - View content that scrolled off screen while editing
+  - Same 1-line scrolling as terminal
+  - Updated editor header to show scroll instructions
+
+### Changed
+- Version bumped to 0.5.1
+- Editor now supports terminal scrollback navigation
+
 ## [0.5.0] - 2026-03-08
 
 ### Added

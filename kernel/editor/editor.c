@@ -30,7 +30,7 @@ void editor_open(const char* filename) {
     
     uint8_t info_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     terminal_setcolor(info_color);
-    terminal_writestring("Press ESC to save and exit\n");
+    terminal_writestring("Press ESC to save and exit | PageUp/PageDown to scroll\n");
     terminal_writestring("----------------------------------------\n");
     
     uint8_t text_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
@@ -45,6 +45,16 @@ void editor_open(const char* filename) {
         unsigned char key = keyboard_getchar();
         
         if (key == 0) {
+            continue;
+        }
+        
+        if (key == KEY_PAGEUP) {
+            terminal_scroll_up();
+            continue;
+        }
+        
+        if (key == KEY_PAGEDOWN) {
+            terminal_scroll_down();
             continue;
         }
         
