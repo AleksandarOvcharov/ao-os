@@ -22,7 +22,8 @@ KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/commands.o \
               $(BUILD_DIR)/system.o \
               $(BUILD_DIR)/version.o \
-              $(BUILD_DIR)/panic.o
+              $(BUILD_DIR)/panic.o \
+              $(BUILD_DIR)/memory.o
 
 KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
 ISO_FILE = ao-os.iso
@@ -65,6 +66,9 @@ $(BUILD_DIR)/version.o: $(KERNEL_DIR)/version.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/panic.o: $(KERNEL_DIR)/panic.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/memory.o: $(KERNEL_DIR)/memory/memory.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(KERNEL_BIN): $(BOOT_OBJ) $(KERNEL_OBJS)

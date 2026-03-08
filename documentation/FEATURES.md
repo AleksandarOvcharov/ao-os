@@ -1,13 +1,17 @@
 # AO OS Features
 
-## Current Features (v0.2.1 - Aurora)
+## Current Features (v0.3.0 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
 - **Kernel**: 32-bit protected mode kernel written in C and Assembly
 - **Version System**: Kernel version tracking with build date
 - **Panic System**: Kernel panic handler for fatal errors with colored screen
-- **Memory Management**: Basic stack setup and memory initialization
+- **Memory Management**: 
+  - Physical memory manager with 1 MB heap
+  - Dynamic memory allocation (kmalloc/kfree)
+  - Block-based allocator with automatic merging
+  - Memory safety checks (double-free, invalid pointer detection)
 
 ### Display
 - **VGA Text Mode**: 80x25 character display
@@ -35,6 +39,7 @@
 - **help**: Display all available commands with descriptions
 - **about**: Show OS information with colored output
 - **kernel**: Display kernel version information (supports -v and --version flags)
+- **mem**: Display memory usage statistics (total, used, free)
 
 #### Display Commands
 - **clear**: Clear the screen

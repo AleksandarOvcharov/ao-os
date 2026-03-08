@@ -2,6 +2,28 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.3.0] - 2026-03-08
+
+### Added
+- **Physical memory manager**
+  - Heap allocator with 1 MB heap space
+  - `kmalloc()` function for dynamic memory allocation
+  - `kfree()` function for memory deallocation
+  - Block-based memory management with merging of free blocks
+  - Memory usage tracking (used/free memory)
+- **Memory command**
+  - `mem` command to display memory usage statistics
+  - Shows total heap, used memory, and free memory
+  - Human-readable format (bytes, KB, MB)
+- **Memory safety**
+  - Double-free detection with kernel panic
+  - Invalid pointer detection
+  - Automatic memory block merging
+
+### Changed
+- Version bumped to 0.3.0
+- Kernel now initializes memory manager on boot
+
 ## [0.2.1] - 2026-03-08
 
 ### Added

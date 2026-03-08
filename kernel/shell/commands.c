@@ -3,6 +3,7 @@
 #include "system.h"
 #include "string.h"
 #include "version.h"
+#include "memory.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -16,6 +17,7 @@ void cmd_help(void) {
     terminal_writestring("  echo     - Print text to the screen\n");
     terminal_writestring("  about    - Display OS information\n");
     terminal_writestring("  kernel   - Kernel information (usage: kernel -v or --version)\n");
+    terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  color    - Change text color (usage: color <fg> <bg>)\n");
     terminal_writestring("  reboot   - Reboot the system\n");
     terminal_writestring("  shutdown - Shutdown the system\n");
@@ -158,4 +160,114 @@ void cmd_kernel(const char* args) {
         terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
         terminal_writestring("Usage: kernel [--version | -v]\n");
     }
+}
+
+static void print_size(size_t bytes) {
+    char buffer[32];
+    
+    if (bytes >= 1024 * 1024) {
+        size_t mb = bytes / (1024 * 1024);
+        
+        int j = 0;
+        size_t temp = mb;
+        if (temp == 0) {
+            buffer[j++] = '0';
+        } else {
+            char digits[12];
+            int k = 0;
+            while (temp > 0) {
+                digits[k++] = '0' + (temp % 10);
+                temp /= 10;
+            }
+            while (k > 0) {
+                buffer[j++] = digits[--k];
+            }
+        }
+        buffer[j++] = ' ';
+        buffer[j++] = 'M';
+        buffer[j++] = 'B';
+        buffer[j] = '\0';
+        terminal_writestring(buffer);
+    } else if (bytes >= 1024) {
+        size_t kb = bytes / 1024;
+        
+        int j = 0;
+        size_t temp = kb;
+        if (temp == 0) {
+            buffer[j++] = '0';
+        } else {
+            char digits[12];
+            int k = 0;
+            while (temp > 0) {
+                digits[k++] = '0' + (temp % 10);
+                temp /= 10;
+            }
+            while (k > 0) {
+                buffer[j++] = digits[--k];
+            }
+        }
+        buffer[j++] = ' ';
+        buffer[j++] = 'K';
+        buffer[j++] = 'B';
+        buffer[j] = '\0';
+        terminal_writestring(buffer);
+    } else {
+        int j = 0;
+        size_t temp = bytes;
+        if (temp == 0) {
+            buffer[j++] = '0';
+        } else {
+            char digits[12];
+            int k = 0;
+            while (temp > 0) {
+                digits[k++] = '0' + (temp % 10);
+                temp /= 10;
+            }
+            while (k > 0) {
+                buffer[j++] = digits[--k];
+            }
+        }
+        buffer[j++] = ' ';
+        buffer[j++] = 'B';
+        buffer[j] = '\0';
+        terminal_writestring(buffer);
+    }
+}
+
+void cmd_mem(void) {
+    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    uint8_t value_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    
+    size_t total = HEAP_SIZE;
+    size_t used = memory_get_used();
+    size_t free = memory_get_free();
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("========================================\n");
+    terminal_writestring("  Memory Information\n");
+    terminal_writestring("========================================\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("Total Heap:  ");
+    terminal_setcolor(value_color);
+    print_size(total);
+    terminal_writestring("\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("Used:        ");
+    terminal_setcolor(value_color);
+    print_size(used);
+    terminal_writestring("\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("Free:        ");
+    terminal_setcolor(value_color);
+    print_size(free);
+    terminal_writestring("\n");
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("========================================\n");
+    
+    terminal_setcolor(label_color);
 }
