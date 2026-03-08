@@ -8,8 +8,10 @@
 static fat12_bpb_t bpb;
 static uint8_t fat_table[FAT12_SECTOR_SIZE * 9];
 static fat12_dir_entry_t root_dir[224];
+static fat12_dir_entry_t current_dir_entries[224];
 static int fat12_initialized = 0;
 static char current_dir[256] = "/";
+static uint16_t current_dir_cluster = 0; // 0 = root directory
 
 static uint16_t fat12_get_next_cluster(uint16_t cluster) {
     uint32_t fat_offset = cluster + (cluster / 2);
@@ -45,25 +47,24 @@ static uint16_t fat12_find_free_cluster(void) {
     return 0;
 }
 
-static int fat12_find_free_dir_entry(void) {
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00 || (uint8_t)root_dir[i].filename[0] == 0xE5) {
-            return i;
-        }
-    }
-    return -1;
-}
+// Removed - now search current_dir_entries inline in each function
 
 static void fat12_write_fat_table(void) {
     uint32_t fat_start = bpb.reserved_sectors;
     uint32_t fat_size = bpb.sectors_per_fat;
     
+    // Write both FAT copies
     for (uint32_t i = 0; i < fat_size && i < 9; i++) {
         ata_write_sector(fat_start + i, &fat_table[i * 512]);
     }
     
     for (uint32_t i = 0; i < fat_size && i < 9; i++) {
         ata_write_sector(fat_start + fat_size + i, &fat_table[i * 512]);
+    }
+    
+    // Reload FAT to ensure consistency
+    for (uint32_t i = 0; i < fat_size && i < 9; i++) {
+        ata_read_sector(fat_start + i, &fat_table[i * 512]);
     }
 }
 
@@ -75,6 +76,75 @@ static void fat12_write_root_dir(void) {
     
     for (uint32_t i = 0; i < root_dir_sectors && i < 14; i++) {
         ata_write_sector(root_dir_start + i, (uint8_t*)&root_dir[i * 16]);
+    }
+}
+
+static void fat12_reload_root_dir(void) {
+    uint32_t fat_start = bpb.reserved_sectors;
+    uint32_t fat_size = bpb.sectors_per_fat;
+    uint32_t root_dir_start = fat_start + (bpb.fat_count * fat_size);
+    uint32_t root_dir_sectors = (bpb.root_dir_entries * 32 + 511) / 512;
+    
+    for (uint32_t i = 0; i < root_dir_sectors && i < 14; i++) {
+        ata_read_sector(root_dir_start + i, (uint8_t*)&root_dir[i * 16]);
+    }
+}
+
+static void fat12_load_directory(uint16_t cluster, fat12_dir_entry_t* entries) {
+    memset(entries, 0, sizeof(fat12_dir_entry_t) * 224);
+    
+    if (cluster == 0) {
+        // Root directory
+        memcpy(entries, root_dir, sizeof(fat12_dir_entry_t) * 224);
+        return;
+    }
+    
+    // Load from cluster
+    uint32_t data_start = bpb.reserved_sectors + 
+                         (bpb.fat_count * bpb.sectors_per_fat) +
+                         ((bpb.root_dir_entries * 32 + 511) / 512);
+    
+    int entry_idx = 0;
+    while (cluster >= 2 && cluster < 0xFF8 && entry_idx < 224) {
+        uint32_t sector = data_start + (cluster - 2) * bpb.sectors_per_cluster;
+        uint8_t sector_data[512];
+        ata_read_sector(sector, sector_data);
+        
+        // Each sector holds 16 directory entries (512 / 32)
+        for (int i = 0; i < 16 && entry_idx < 224; i++, entry_idx++) {
+            memcpy(&entries[entry_idx], &sector_data[i * 32], 32);
+        }
+        
+        cluster = fat12_get_next_cluster(cluster);
+    }
+}
+
+static void fat12_write_directory(uint16_t cluster, fat12_dir_entry_t* entries) {
+    if (cluster == 0) {
+        // Root directory
+        memcpy(root_dir, entries, sizeof(fat12_dir_entry_t) * 224);
+        fat12_write_root_dir();
+        return;
+    }
+    
+    // Write to cluster
+    uint32_t data_start = bpb.reserved_sectors + 
+                         (bpb.fat_count * bpb.sectors_per_fat) +
+                         ((bpb.root_dir_entries * 32 + 511) / 512);
+    
+    int entry_idx = 0;
+    while (cluster >= 2 && cluster < 0xFF8 && entry_idx < 224) {
+        uint32_t sector = data_start + (cluster - 2) * bpb.sectors_per_cluster;
+        uint8_t sector_data[512];
+        memset(sector_data, 0, 512);
+        
+        // Each sector holds 16 directory entries
+        for (int i = 0; i < 16 && entry_idx < 224; i++, entry_idx++) {
+            memcpy(&sector_data[i * 32], &entries[entry_idx], 32);
+        }
+        
+        ata_write_sector(sector, sector_data);
+        cluster = fat12_get_next_cluster(cluster);
     }
 }
 
@@ -157,33 +227,47 @@ int fat12_available(void) {
 int fat12_read(const char* name, char* buffer, uint32_t* size) {
     if (!fat12_initialized) return -1;
     
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00) break;
-        if ((uint8_t)root_dir[i].filename[0] == 0xE5) continue;
-        if (root_dir[i].attributes & FAT12_ATTR_DIRECTORY) continue;
-        if (root_dir[i].attributes & FAT12_ATTR_VOLUME_ID) continue;
+    // Load current directory
+    fat12_load_directory(current_dir_cluster, current_dir_entries);
+    
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00) break;
+        if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
+        if (current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY) continue;
+        if (current_dir_entries[i].attributes & FAT12_ATTR_VOLUME_ID) continue;
         
         char fat_filename[12];
-        memcpy(fat_filename, root_dir[i].filename, 8);
-        memcpy(fat_filename + 8, root_dir[i].extension, 3);
+        memcpy(fat_filename, current_dir_entries[i].filename, 8);
+        memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
         fat_filename[11] = '\0';
         
         if (fat12_compare_filename(fat_filename, name)) {
-            uint32_t file_size = root_dir[i].file_size;
-            if (file_size > 512) file_size = 512;
-            
-            uint16_t cluster = root_dir[i].first_cluster_low;
-            uint32_t data_start = bpb.reserved_sectors + 
-                                 (bpb.fat_count * bpb.sectors_per_fat) +
-                                 ((bpb.root_dir_entries * 32 + 511) / 512);
+            uint16_t cluster = current_dir_entries[i].first_cluster_low;
+            uint32_t file_size = current_dir_entries[i].file_size;
             
             if (cluster >= 2) {
-                uint32_t sector = data_start + (cluster - 2) * bpb.sectors_per_cluster;
-                uint8_t sector_data[512];
-                ata_read_sector(sector, sector_data);
+                uint32_t data_start = bpb.reserved_sectors + 
+                                     (bpb.fat_count * bpb.sectors_per_fat) +
+                                     ((bpb.root_dir_entries * 32 + 511) / 512);
                 
-                memcpy(buffer, sector_data, file_size);
-                *size = file_size;
+                uint32_t bytes_read = 0;
+                
+                // Follow cluster chain
+                while (cluster >= 2 && cluster < 0xFF8 && bytes_read < file_size) {
+                    uint32_t sector = data_start + (cluster - 2) * bpb.sectors_per_cluster;
+                    uint8_t sector_data[512];
+                    ata_read_sector(sector, sector_data);
+                    
+                    uint32_t bytes_to_read = file_size - bytes_read;
+                    if (bytes_to_read > 512) bytes_to_read = 512;
+                    
+                    memcpy(buffer + bytes_read, sector_data, bytes_to_read);
+                    bytes_read += bytes_to_read;
+                    
+                    cluster = fat12_get_next_cluster(cluster);
+                }
+                
+                *size = bytes_read;
                 return 0;
             }
         }
@@ -201,34 +285,138 @@ int fat12_create(const char* name, const char* data, uint32_t size) {
         return -1;
     }
     
-    // Check for duplicate names
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00) break;
-        if ((uint8_t)root_dir[i].filename[0] == 0xE5) continue;
+    // Load current directory entries
+    fat12_load_directory(current_dir_cluster, current_dir_entries);
+    
+    // Check if file already exists - if so, update it
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00) break;
+        if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
+        if (current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY) continue;
         
         char fat_filename[12];
-        memcpy(fat_filename, root_dir[i].filename, 8);
-        memcpy(fat_filename + 8, root_dir[i].extension, 3);
+        memcpy(fat_filename, current_dir_entries[i].filename, 8);
+        memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
         fat_filename[11] = '\0';
         
         if (fat12_compare_filename(fat_filename, name)) {
-            klog_error("File already exists with this name");
-            return -1;
+            // File exists - update it
+            uint16_t old_cluster = current_dir_entries[i].first_cluster_low;
+            
+            // Free old cluster chain
+            uint16_t cluster = old_cluster;
+            while (cluster >= 2 && cluster < 0xFF8) {
+                uint16_t next = fat12_get_next_cluster(cluster);
+                fat12_set_cluster_value(cluster, 0x000);
+                cluster = next;
+            }
+            
+            // Allocate new clusters for updated content
+            uint32_t clusters_needed = (size + 511) / 512;
+            if (clusters_needed == 0) clusters_needed = 1;
+            
+            uint16_t first_cluster = 0;
+            uint16_t prev_cluster = 0;
+            
+            for (uint32_t j = 0; j < clusters_needed; j++) {
+                uint16_t free_cluster = fat12_find_free_cluster();
+                if (free_cluster == 0) {
+                    klog_error("No free clusters available");
+                    return -1;
+                }
+                
+                if (j == 0) {
+                    first_cluster = free_cluster;
+                } else {
+                    fat12_set_cluster_value(prev_cluster, free_cluster);
+                }
+                
+                prev_cluster = free_cluster;
+            }
+            
+            fat12_set_cluster_value(prev_cluster, 0xFFF);
+            
+            // Update existing entry
+            current_dir_entries[i].first_cluster_low = first_cluster;
+            current_dir_entries[i].file_size = size;
+            
+            // Write data
+            uint32_t data_start = bpb.reserved_sectors + 
+                                 (bpb.fat_count * bpb.sectors_per_fat) +
+                                 ((bpb.root_dir_entries * 32 + 511) / 512);
+            
+            cluster = first_cluster;
+            uint32_t bytes_written = 0;
+            
+            while (cluster >= 2 && cluster < 0xFF8 && bytes_written < size) {
+                uint32_t sector = data_start + (cluster - 2) * bpb.sectors_per_cluster;
+                uint8_t sector_data[512];
+                memset(sector_data, 0, 512);
+                
+                uint32_t bytes_to_write = size - bytes_written;
+                if (bytes_to_write > 512) bytes_to_write = 512;
+                
+                memcpy(sector_data, data + bytes_written, bytes_to_write);
+                ata_write_sector(sector, sector_data);
+                
+                bytes_written += bytes_to_write;
+                cluster = fat12_get_next_cluster(cluster);
+            }
+            
+            fat12_write_fat_table();
+            fat12_write_directory(current_dir_cluster, current_dir_entries);
+            if (current_dir_cluster == 0) {
+                fat12_reload_root_dir();
+            }
+            
+            return 0;
         }
     }
     
-    if (size > 512) {
-        klog_warn("File too large for single cluster");
-        size = 512;
+    // File doesn't exist - create new
+    // Calculate number of clusters needed
+    uint32_t clusters_needed = (size + 511) / 512;
+    if (clusters_needed == 0) clusters_needed = 1;
+    
+    // Allocate cluster chain
+    uint16_t first_cluster = 0;
+    uint16_t prev_cluster = 0;
+    
+    for (uint32_t i = 0; i < clusters_needed; i++) {
+        uint16_t free_cluster = fat12_find_free_cluster();
+        if (free_cluster == 0) {
+            klog_error("No free clusters available");
+            // Free previously allocated clusters
+            uint16_t cluster = first_cluster;
+            while (cluster >= 2 && cluster < 0xFF8) {
+                uint16_t next = fat12_get_next_cluster(cluster);
+                fat12_set_cluster_value(cluster, 0x000);
+                cluster = next;
+            }
+            return -1;
+        }
+        
+        if (i == 0) {
+            first_cluster = free_cluster;
+        } else {
+            fat12_set_cluster_value(prev_cluster, free_cluster);
+        }
+        
+        prev_cluster = free_cluster;
     }
     
-    uint16_t free_cluster = fat12_find_free_cluster();
-    if (free_cluster == 0) {
-        klog_error("No free clusters available");
-        return -1;
+    // Mark last cluster as EOF
+    fat12_set_cluster_value(prev_cluster, 0xFFF);
+    
+    // Find free entry in current directory
+    int free_entry = -1;
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00 || (uint8_t)current_dir_entries[i].filename[0] == 0xE5) {
+            free_entry = i;
+            break;
+        }
     }
     
-    int free_entry = fat12_find_free_dir_entry();
     if (free_entry == -1) {
         klog_error("No free directory entries");
         return -1;
@@ -243,53 +431,69 @@ int fat12_create(const char* name, const char* data, uint32_t size) {
         }
     }
     
-    memcpy(root_dir[free_entry].filename, formatted_name, 8);
-    memcpy(root_dir[free_entry].extension, formatted_name + 8, 3);
-    root_dir[free_entry].attributes = FAT12_ATTR_ARCHIVE;
-    root_dir[free_entry].reserved = 0;
-    root_dir[free_entry].creation_time_tenths = 0;
-    root_dir[free_entry].creation_time = 0;
-    root_dir[free_entry].creation_date = 0;
-    root_dir[free_entry].last_access_date = 0;
-    root_dir[free_entry].first_cluster_high = 0;
-    root_dir[free_entry].last_modified_time = 0;
-    root_dir[free_entry].last_modified_date = 0;
-    root_dir[free_entry].first_cluster_low = free_cluster;
-    root_dir[free_entry].file_size = size;
+    memcpy(current_dir_entries[free_entry].filename, formatted_name, 8);
+    memcpy(current_dir_entries[free_entry].extension, formatted_name + 8, 3);
+    current_dir_entries[free_entry].attributes = FAT12_ATTR_ARCHIVE;
+    current_dir_entries[free_entry].reserved = 0;
+    current_dir_entries[free_entry].creation_time_tenths = 0;
+    current_dir_entries[free_entry].creation_time = 0;
+    current_dir_entries[free_entry].creation_date = 0;
+    current_dir_entries[free_entry].last_access_date = 0;
+    current_dir_entries[free_entry].first_cluster_high = 0;
+    current_dir_entries[free_entry].last_modified_time = 0;
+    current_dir_entries[free_entry].last_modified_date = 0;
+    current_dir_entries[free_entry].first_cluster_low = first_cluster;
+    current_dir_entries[free_entry].file_size = size;
     
-    fat12_set_cluster_value(free_cluster, 0xFFF);
-    
+    // Write data across cluster chain
     uint32_t data_start = bpb.reserved_sectors + 
                          (bpb.fat_count * bpb.sectors_per_fat) +
                          ((bpb.root_dir_entries * 32 + 511) / 512);
-    uint32_t sector = data_start + (free_cluster - 2) * bpb.sectors_per_cluster;
     
-    uint8_t sector_data[512];
-    memset(sector_data, 0, 512);
-    memcpy(sector_data, data, size);
-    ata_write_sector(sector, sector_data);
+    uint16_t cluster = first_cluster;
+    uint32_t bytes_written = 0;
+    
+    while (cluster >= 2 && cluster < 0xFF8 && bytes_written < size) {
+        uint32_t sector = data_start + (cluster - 2) * bpb.sectors_per_cluster;
+        uint8_t sector_data[512];
+        memset(sector_data, 0, 512);
+        
+        uint32_t bytes_to_write = size - bytes_written;
+        if (bytes_to_write > 512) bytes_to_write = 512;
+        
+        memcpy(sector_data, data + bytes_written, bytes_to_write);
+        ata_write_sector(sector, sector_data);
+        
+        bytes_written += bytes_to_write;
+        cluster = fat12_get_next_cluster(cluster);
+    }
     
     fat12_write_fat_table();
-    fat12_write_root_dir();
+    fat12_write_directory(current_dir_cluster, current_dir_entries);
+    if (current_dir_cluster == 0) {
+        fat12_reload_root_dir();
+    }
     
-    klog_info("File created successfully");
     return 0;
 }
 
 int fat12_delete(const char* name) {
     if (!fat12_initialized) return -1;
     
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00) break;
-        if ((uint8_t)root_dir[i].filename[0] == 0xE5) continue;
+    // Load current directory
+    fat12_load_directory(current_dir_cluster, current_dir_entries);
+    
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00) break;
+        if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
         
         char fat_filename[12];
-        memcpy(fat_filename, root_dir[i].filename, 8);
-        memcpy(fat_filename + 8, root_dir[i].extension, 3);
+        memcpy(fat_filename, current_dir_entries[i].filename, 8);
+        memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
         fat_filename[11] = '\0';
         
         if (fat12_compare_filename(fat_filename, name)) {
-            uint16_t cluster = root_dir[i].first_cluster_low;
+            uint16_t cluster = current_dir_entries[i].first_cluster_low;
             
             while (cluster >= 2 && cluster < 0xFF8) {
                 uint16_t next_cluster = fat12_get_next_cluster(cluster);
@@ -297,12 +501,14 @@ int fat12_delete(const char* name) {
                 cluster = next_cluster;
             }
             
-            root_dir[i].filename[0] = 0xE5;
+            current_dir_entries[i].filename[0] = 0xE5;
             
             fat12_write_fat_table();
-            fat12_write_root_dir();
+            fat12_write_directory(current_dir_cluster, current_dir_entries);
+            if (current_dir_cluster == 0) {
+                fat12_reload_root_dir();
+            }
             
-            klog_info("File deleted successfully");
             return 0;
         }
     }
@@ -318,36 +524,44 @@ int fat12_list(void** entries, int* count) {
     
     *count = 0;
     
-    // If not in root directory, return empty list
-    // (Full subdirectory support not yet implemented)
-    if (strcmp(current_dir, "/") != 0) {
-        *entries = (void*)fat12_file_list;
-        return 0;
-    }
+    // Load current directory entries
+    fat12_load_directory(current_dir_cluster, current_dir_entries);
     
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00) break;
-        if ((uint8_t)root_dir[i].filename[0] == 0xE5) continue;
-        if (root_dir[i].attributes & FAT12_ATTR_VOLUME_ID) continue;
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00) break;
+        if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
+        if (current_dir_entries[i].attributes & FAT12_ATTR_VOLUME_ID) continue;
+        
+        // Skip entries with invalid attributes (system, hidden, etc.)
+        if (current_dir_entries[i].attributes & 0x02) continue; // Hidden
+        if (current_dir_entries[i].attributes & 0x04) continue; // System
+        
+        // Allow empty files (cluster 0 with size 0 is valid)
+        // Skip only truly invalid entries
+        if (current_dir_entries[i].first_cluster_low == 0 && current_dir_entries[i].file_size > 0) continue;
+        if (current_dir_entries[i].first_cluster_low == 0 && !(current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY)) {
+            // Empty file is OK, but must have valid name
+            if (current_dir_entries[i].filename[0] == 0x00 || current_dir_entries[i].filename[0] == ' ') continue;
+        }
         
         memset(fat12_file_list[*count].name, 0, FS_MAX_FILENAME);
         
         int name_pos = 0;
-        for (int j = 0; j < 8 && root_dir[i].filename[j] != ' '; j++) {
-            fat12_file_list[*count].name[name_pos++] = root_dir[i].filename[j];
+        for (int j = 0; j < 8 && current_dir_entries[i].filename[j] != ' '; j++) {
+            fat12_file_list[*count].name[name_pos++] = current_dir_entries[i].filename[j];
         }
         
-        if (root_dir[i].extension[0] != ' ') {
+        if (current_dir_entries[i].extension[0] != ' ') {
             fat12_file_list[*count].name[name_pos++] = '.';
-            for (int j = 0; j < 3 && root_dir[i].extension[j] != ' '; j++) {
-                fat12_file_list[*count].name[name_pos++] = root_dir[i].extension[j];
+            for (int j = 0; j < 3 && current_dir_entries[i].extension[j] != ' '; j++) {
+                fat12_file_list[*count].name[name_pos++] = current_dir_entries[i].extension[j];
             }
         }
         fat12_file_list[*count].name[name_pos] = '\0';
         
-        fat12_file_list[*count].size = root_dir[i].file_size;
+        fat12_file_list[*count].size = current_dir_entries[i].file_size;
         fat12_file_list[*count].used = 1;
-        fat12_file_list[*count].is_directory = (root_dir[i].attributes & FAT12_ATTR_DIRECTORY) ? 1 : 0;
+        fat12_file_list[*count].is_directory = (current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY) ? 1 : 0;
         
         (*count)++;
     }
@@ -371,14 +585,17 @@ int fat12_mkdir(const char* name) {
         return -1;
     }
     
+    // Load current directory
+    fat12_load_directory(current_dir_cluster, current_dir_entries);
+    
     // Check for duplicate names
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00) break;
-        if ((uint8_t)root_dir[i].filename[0] == 0xE5) continue;
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00) break;
+        if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
         
         char fat_filename[12];
-        memcpy(fat_filename, root_dir[i].filename, 8);
-        memcpy(fat_filename + 8, root_dir[i].extension, 3);
+        memcpy(fat_filename, current_dir_entries[i].filename, 8);
+        memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
         fat_filename[11] = '\0';
         
         if (fat12_compare_filename(fat_filename, name)) {
@@ -389,8 +606,8 @@ int fat12_mkdir(const char* name) {
     
     // Find free directory entry
     int free_entry = -1;
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00 || (uint8_t)root_dir[i].filename[0] == 0xE5) {
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00 || (uint8_t)current_dir_entries[i].filename[0] == 0xE5) {
             free_entry = i;
             break;
         }
@@ -418,42 +635,65 @@ int fat12_mkdir(const char* name) {
     }
     
     // Create directory entry
-    memcpy(root_dir[free_entry].filename, formatted_name, 8);
-    memcpy(root_dir[free_entry].extension, formatted_name + 8, 3);
-    root_dir[free_entry].attributes = FAT12_ATTR_DIRECTORY;
-    root_dir[free_entry].first_cluster_low = free_cluster;
-    root_dir[free_entry].file_size = 0;
+    memcpy(current_dir_entries[free_entry].filename, formatted_name, 8);
+    memcpy(current_dir_entries[free_entry].extension, formatted_name + 8, 3);
+    current_dir_entries[free_entry].attributes = FAT12_ATTR_DIRECTORY;
+    current_dir_entries[free_entry].reserved = 0;
+    current_dir_entries[free_entry].creation_time_tenths = 0;
+    current_dir_entries[free_entry].creation_time = 0;
+    current_dir_entries[free_entry].creation_date = 0;
+    current_dir_entries[free_entry].last_access_date = 0;
+    current_dir_entries[free_entry].first_cluster_high = 0;
+    current_dir_entries[free_entry].last_modified_time = 0;
+    current_dir_entries[free_entry].last_modified_date = 0;
+    current_dir_entries[free_entry].first_cluster_low = free_cluster;
+    current_dir_entries[free_entry].file_size = 0;
     
     // Mark cluster as used
     fat12_set_cluster_value(free_cluster, 0xFFF);
     
-    // Write FAT and root directory
-    fat12_write_fat_table();
-    fat12_write_root_dir();
+    // Initialize the directory cluster with zeros
+    uint32_t data_start = bpb.reserved_sectors + 
+                         (bpb.fat_count * bpb.sectors_per_fat) +
+                         ((bpb.root_dir_entries * 32 + 511) / 512);
+    uint32_t sector = data_start + (free_cluster - 2) * bpb.sectors_per_cluster;
     
-    klog_info("Directory created successfully");
+    uint8_t empty_sector[512];
+    memset(empty_sector, 0, 512);
+    ata_write_sector(sector, empty_sector);
+    
+    // Write FAT and directory
+    fat12_write_fat_table();
+    fat12_write_directory(current_dir_cluster, current_dir_entries);
+    if (current_dir_cluster == 0) {
+        fat12_reload_root_dir();
+    }
+    
     return 0;
 }
 
 int fat12_rmdir(const char* name) {
     if (!fat12_initialized) return -1;
     
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00) break;
-        if ((uint8_t)root_dir[i].filename[0] == 0xE5) continue;
+    // Load current directory
+    fat12_load_directory(current_dir_cluster, current_dir_entries);
+    
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00) break;
+        if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
         
         char fat_filename[12];
-        memcpy(fat_filename, root_dir[i].filename, 8);
-        memcpy(fat_filename + 8, root_dir[i].extension, 3);
+        memcpy(fat_filename, current_dir_entries[i].filename, 8);
+        memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
         fat_filename[11] = '\0';
         
         if (fat12_compare_filename(fat_filename, name)) {
-            if (!(root_dir[i].attributes & FAT12_ATTR_DIRECTORY)) {
+            if (!(current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY)) {
                 klog_warn("Not a directory");
                 return -1;
             }
             
-            uint16_t cluster = root_dir[i].first_cluster_low;
+            uint16_t cluster = current_dir_entries[i].first_cluster_low;
             
             // Free cluster chain
             while (cluster >= 2 && cluster < 0xFF8) {
@@ -463,12 +703,14 @@ int fat12_rmdir(const char* name) {
             }
             
             // Mark directory entry as deleted
-            root_dir[i].filename[0] = 0xE5;
+            current_dir_entries[i].filename[0] = 0xE5;
             
             fat12_write_fat_table();
-            fat12_write_root_dir();
+            fat12_write_directory(current_dir_cluster, current_dir_entries);
+            if (current_dir_cluster == 0) {
+                fat12_reload_root_dir();
+            }
             
-            klog_info("Directory deleted successfully");
             return 0;
         }
     }
@@ -483,40 +725,130 @@ int fat12_chdir(const char* name) {
     // Handle special cases
     if (strcmp(name, "/") == 0) {
         strcpy(current_dir, "/");
+        current_dir_cluster = 0;
         return 0;
     }
     
     if (strcmp(name, "..") == 0) {
         // Go to parent directory
-        int len = strlen(current_dir);
-        if (len > 1) {
-            for (int i = len - 2; i >= 0; i--) {
-                if (current_dir[i] == '/') {
-                    current_dir[i + 1] = '\0';
-                    break;
-                }
+        if (strcmp(current_dir, "/") == 0) {
+            return 0; // Already at root
+        }
+        
+        // Remove last directory from path
+        char parent_path[256];
+        strcpy(parent_path, current_dir);
+        int len = strlen(parent_path);
+        
+        // Remove trailing slash if present
+        if (len > 1 && parent_path[len - 1] == '/') {
+            parent_path[len - 1] = '\0';
+            len--;
+        }
+        
+        // Find last slash
+        int last_slash = -1;
+        for (int i = len - 1; i >= 0; i--) {
+            if (parent_path[i] == '/') {
+                last_slash = i;
+                break;
             }
         }
+        
+        if (last_slash == 0) {
+            // Parent is root
+            strcpy(current_dir, "/");
+            current_dir_cluster = 0;
+            return 0;
+        }
+        
+        // Truncate to parent path
+        parent_path[last_slash + 1] = '\0';
+        
+        // Navigate from root to find parent cluster
+        current_dir_cluster = 0;
+        strcpy(current_dir, "/");
+        
+        // Parse parent path and navigate to it
+        char path_copy[256];
+        strcpy(path_copy, parent_path);
+        
+        char* token = path_copy + 1; // Skip leading /
+        while (*token) {
+            // Find next /
+            char* next_slash = token;
+            while (*next_slash && *next_slash != '/') next_slash++;
+            
+            if (token == next_slash) break; // Empty component
+            
+            // Extract directory name
+            char dir_name[256];
+            int name_len = next_slash - token;
+            memcpy(dir_name, token, name_len);
+            dir_name[name_len] = '\0';
+            
+            // Find this directory in current cluster
+            fat12_load_directory(current_dir_cluster, current_dir_entries);
+            int found = 0;
+            
+            for (int i = 0; i < 224; i++) {
+                if (current_dir_entries[i].filename[0] == 0x00) break;
+                if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
+                
+                char fat_filename[12];
+                memcpy(fat_filename, current_dir_entries[i].filename, 8);
+                memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
+                fat_filename[11] = '\0';
+                
+                if (fat12_compare_filename(fat_filename, dir_name)) {
+                    if (current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY) {
+                        current_dir_cluster = current_dir_entries[i].first_cluster_low;
+                        found = 1;
+                        break;
+                    }
+                }
+            }
+            
+            if (!found) {
+                // Directory not found, go back to root
+                strcpy(current_dir, "/");
+                current_dir_cluster = 0;
+                return -1;
+            }
+            
+            // Move to next component
+            if (*next_slash == '/') {
+                token = next_slash + 1;
+            } else {
+                break;
+            }
+        }
+        
+        strcpy(current_dir, parent_path);
         return 0;
     }
     
+    // Load current directory
+    fat12_load_directory(current_dir_cluster, current_dir_entries);
+    
     // Check if directory exists
-    for (int i = 0; i < bpb.root_dir_entries; i++) {
-        if (root_dir[i].filename[0] == 0x00) break;
-        if ((uint8_t)root_dir[i].filename[0] == 0xE5) continue;
+    for (int i = 0; i < 224; i++) {
+        if (current_dir_entries[i].filename[0] == 0x00) break;
+        if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
         
         char fat_filename[12];
-        memcpy(fat_filename, root_dir[i].filename, 8);
-        memcpy(fat_filename + 8, root_dir[i].extension, 3);
+        memcpy(fat_filename, current_dir_entries[i].filename, 8);
+        memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
         fat_filename[11] = '\0';
         
         if (fat12_compare_filename(fat_filename, name)) {
-            if (!(root_dir[i].attributes & FAT12_ATTR_DIRECTORY)) {
+            if (!(current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY)) {
                 klog_warn("Not a directory");
                 return -1;
             }
             
-            // Update current directory
+            // Update current directory cluster and path
+            current_dir_cluster = current_dir_entries[i].first_cluster_low;
             if (current_dir[strlen(current_dir) - 1] != '/') {
                 strcat(current_dir, "/");
             }

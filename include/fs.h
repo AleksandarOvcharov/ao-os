@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 #define FS_MAX_FILENAME 32
-#define FS_MAX_FILESIZE 512
+#define FS_MAX_FILESIZE 4096  // 8 clusters * 512 bytes
 
 typedef struct {
     char name[FS_MAX_FILENAME];

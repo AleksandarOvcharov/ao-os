@@ -771,7 +771,7 @@ void cmd_touch(const char* args) {
     } else {
         uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
         terminal_setcolor(error_color);
-        terminal_writestring("Error: Could not create file (filesystem full or file exists)\n");
+        terminal_writestring("Error: Cannot create file (must be in root /)\n");
         uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
         terminal_setcolor(label_color);
     }
@@ -843,7 +843,14 @@ void cmd_install(void) {
         }
     }
     
-    installer_run();
+    int result = installer_run();
+    
+    // Reinitialize filesystem to reload from freshly formatted disk
+    if (result == 0) {
+        terminal_writestring("\nReinitializing filesystem...\n");
+        fs_init();
+        terminal_writestring("Filesystem reloaded.\n");
+    }
 }
 
 void cmd_mkdir(const char* args) {
@@ -862,7 +869,7 @@ void cmd_mkdir(const char* args) {
     } else {
         uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
         terminal_setcolor(error_color);
-        terminal_writestring("Error: Directory already exists or invalid name\n");
+        terminal_writestring("Error: Could not create directory\n");
         terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
     }
 }

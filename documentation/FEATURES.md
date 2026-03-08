@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.7.1 - Aurora)
+## AO-OS Features (v0.9.0) - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -46,13 +46,16 @@
   - Automatic filesystem detection
   - Clean architecture for multiple filesystem support
 - **FAT12 Filesystem**:
-  - Read files from FAT12-formatted floppy disks
+  - Full read/write support for FAT12-formatted disks
+  - **Complete subdirectory support** - create and navigate directory trees
   - Boot sector and BPB parsing
   - FAT table and cluster chain navigation
-  - Root directory parsing
-  - File listing and reading from disk
+  - Directory cluster reading and writing
+  - File listing, reading, and writing in any directory
+  - Multi-cluster file support (files up to 4KB)
+  - Cluster chain allocation and traversal
   - Persistent storage support
-  - Read-only mode (write support planned)
+  - Create, delete, and update files/directories anywhere in filesystem
 - **ATA PIO Driver**: Primary ATA controller support
   - Read/write sectors using PIO mode
   - LBA28 addressing (up to 128GB disks)
@@ -114,16 +117,21 @@
   - Type text, Enter for newline, Backspace to delete
   - PageUp/PageDown to scroll through content
   - Real-time position tracking
-  - 512 byte limit
+  - 4KB buffer (supports multi-cluster files)
 - **write**: Create or modify files (usage: `write <filename> <content>`)
 - **rm**: Remove files (usage: `rm <filename>`)
 - **touch**: Create empty files (usage: `touch <filename>`)
-- **mkdir**: Create directory (usage: `mkdir <dirname>`)
+- **mkdir**: Create directory in current location (usage: `mkdir <dirname>`)
+  - Works in root and subdirectories
+  - Creates nested directory structures
 - **rmdir**: Remove directory (usage: `rmdir <dirname>`)
-- **cd**: Change current directory (usage: `cd <dirname>`)
+  - Deletes directory and frees clusters
+- **cd**: Navigate directory tree (usage: `cd <dirname>`)
   - `cd /` - Go to root directory
   - `cd ..` - Go to parent directory
-- **pwd**: Print working directory
+  - `cd dirname` - Enter subdirectory
+  - Full directory tree navigation
+- **pwd**: Print working directory path
 
 #### System Commands
 - **install**: Install AO OS to disk (with confirmation prompt)

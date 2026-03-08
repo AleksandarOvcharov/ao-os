@@ -2,6 +2,60 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.9.0] - Full Subdirectory Support
+
+### Added
+- **Full subdirectory support in FAT12 filesystem**
+  - Create directories inside other directories
+  - Navigate directory tree with `cd`
+  - Create and edit files in subdirectories
+  - Delete files and directories from any location
+  - Directory cluster tracking and traversal
+- **Enhanced directory operations**
+  - `fat12_load_directory()` - Load directory entries from any cluster
+  - `fat12_write_directory()` - Write directory entries to any cluster
+  - Current directory cluster tracking (`current_dir_cluster`)
+  - All file operations work in current directory context
+
+### Changed
+- File and directory operations now work in current directory instead of root only
+- `ls` command shows contents of current directory
+- `mkdir`, `touch`, `edit`, `rm`, `rmdir` all work in subdirectories
+- Improved error messages for file operations
+
+### Technical Details
+- Directory entries stored in clusters (16 entries per 512-byte sector)
+- Cluster chain traversal for large directories
+- Automatic root directory synchronization
+- Current directory state maintained across operations
+
+## [0.8.0] - 2026-03-08
+
+### Added
+- **Multi-Cluster File Support**
+  - Files can now be larger than 512 bytes
+  - Cluster chain traversal for reading and writing
+  - Automatic cluster allocation for large files
+  - Maximum file size increased to 4096 bytes (8 clusters)
+  - Editor buffer increased to 4KB
+
+### Changed
+- `fat12_create()` now allocates multiple clusters for large files
+- `fat12_read()` follows cluster chains to read entire files
+- File size limit increased from 512 bytes to 4096 bytes
+- Editor can now handle files up to 4KB
+
+### Technical
+- Implemented cluster chain allocation algorithm
+- Added cluster chain traversal in read operations
+- Automatic cleanup of partial allocations on failure
+- FAT table properly links clusters in chain
+- EOF marker (0xFFF) set on last cluster
+
+### Fixed
+- Files larger than 512 bytes now work correctly
+- Cluster chains properly managed in FAT table
+
 ## [0.7.1] - 2026-03-08
 
 ### Added
