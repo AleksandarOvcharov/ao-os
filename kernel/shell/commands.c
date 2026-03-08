@@ -27,7 +27,8 @@ void cmd_help(void) {
     terminal_writestring("  sysinfo  - Display system information\n");
     terminal_writestring("  diskinfo - Display disk information\n");
     terminal_writestring("  sconsole - Serial console status (usage: sconsole --status)\n");
-    terminal_writestring("  ls       - List files in RAM filesystem\n");
+    terminal_writestring("  checkfs  - Display current filesystem type\n");
+    terminal_writestring("  ls       - List files in filesystem\n");
     terminal_writestring("  cat      - Display file contents (usage: cat <filename>)\n");
     terminal_writestring("  edit     - Edit file (usage: edit <filename>)\n");
     terminal_writestring("  write    - Write to file (usage: write <filename> <content>)\n");
@@ -604,8 +605,9 @@ void cmd_ls(void) {
         return;
     }
     
-    for (int i = 0; i < 16; i++) {
-        if (files[i].used) {
+    int displayed = 0;
+    for (int i = 0; i < 224 && displayed < count; i++) {
+        if (files[i].used || files[i].name[0] != 0) {
             terminal_writestring("  ");
             terminal_setcolor(file_color);
             terminal_writestring(files[i].name);
@@ -632,6 +634,7 @@ void cmd_ls(void) {
             
             terminal_writestring(size_str);
             terminal_writestring(" bytes)\n");
+            displayed++;
         }
     }
 }
@@ -766,4 +769,37 @@ void cmd_edit(const char* args) {
     }
     
     editor_open(args);
+}
+
+void cmd_checkfs(void) {
+    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    uint8_t value_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("========================================\n");
+    terminal_writestring("  Filesystem Information\n");
+    terminal_writestring("========================================\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("Current filesystem: ");
+    terminal_setcolor(value_color);
+    terminal_writestring(fs_get_type());
+    terminal_writestring("\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("Status: ");
+    terminal_setcolor(value_color);
+    
+    const char* fs_type = fs_get_type();
+    if (strcmp(fs_type, "FAT12") == 0) {
+        terminal_writestring("Persistent storage (disk-backed)\n");
+    } else {
+        terminal_writestring("Volatile storage (RAM-backed)\n");
+    }
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("========================================\n");
+    
+    terminal_setcolor(label_color);
 }

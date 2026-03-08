@@ -2,6 +2,37 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [0.6.0] - 2026-03-08
+
+### Added
+- **FAT12 Filesystem Support**
+  - Read files from FAT12-formatted disks
+  - Parse FAT12 boot sector and BPB (BIOS Parameter Block)
+  - Read FAT table and root directory
+  - Navigate cluster chains
+  - File listing from disk
+  - Automatic filesystem detection (FAT12 or ramfs fallback)
+  - Foundation for persistent storage
+
+### Changed
+- Version bumped to 0.6.0 (major milestone: disk filesystem)
+- Filesystem abstraction now detects FAT12 and uses it if available
+- Falls back to ramfs if no FAT12 disk detected
+- `ls` command shows files from disk if FAT12 available
+- `cat` command reads files from disk if FAT12 available
+
+### Technical
+- Implemented FAT12 BPB parsing
+- Implemented cluster chain traversal
+- Implemented directory entry parsing
+- FAT12 write operations planned for future release
+- Hybrid mode: read from FAT12, write to ramfs (temporary)
+
+### Limitations
+- FAT12 write/delete not yet implemented (read-only for now)
+- Maximum file size: 512 bytes for display
+- Single cluster files only (multi-cluster support planned)
+
 ## [0.5.2] - 2026-03-08
 
 ### Added

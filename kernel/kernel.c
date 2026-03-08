@@ -29,12 +29,12 @@ void kernel_main(void) {
     memory_init();
     timer_wait(30);
     
-    klog_info("Initializing filesystem...");
-    fs_init();
-    timer_wait(30);
-    
     klog_info("Initializing ATA disk driver...");
     ata_init();
+    timer_wait(30);
+    
+    klog_info("Initializing filesystem...");
+    fs_init();
     timer_wait(30);
     
     klog_info("Initializing keyboard driver...");

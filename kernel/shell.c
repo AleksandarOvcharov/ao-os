@@ -99,6 +99,8 @@ void shell_execute_command(const char* cmd) {
         cmd_diskinfo();
     } else if (strncmp(cmd, "sconsole", cmd_len) == 0 && cmd_len == 8) {
         cmd_sconsole(args);
+    } else if (strncmp(cmd, "checkfs", cmd_len) == 0 && cmd_len == 7) {
+        cmd_checkfs();
     } else if (strncmp(cmd, "ls", cmd_len) == 0 && cmd_len == 2) {
         cmd_ls();
     } else if (strncmp(cmd, "cat", cmd_len) == 0 && cmd_len == 3) {

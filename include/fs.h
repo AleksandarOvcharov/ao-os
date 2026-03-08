@@ -17,5 +17,6 @@ int fs_create(const char* name, const char* data, uint32_t size);
 int fs_read(const char* name, char* buffer, uint32_t* size);
 int fs_delete(const char* name);
 int fs_list(fs_file_info_t** files, int* count);
+const char* fs_get_type(void);
 
 #endif

@@ -1,6 +1,6 @@
 # AO OS Features
 
-## Current Features (v0.5.2 - Aurora)
+## Current Features (v0.6.0 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -43,8 +43,16 @@
 - **Filesystem Abstraction Layer**:
   - Generic filesystem interface (`fs_init()`, `fs_create()`, `fs_read()`, `fs_delete()`, `fs_list()`)
   - Decouples applications from filesystem implementations
-  - Easy to add new filesystems (FAT, ext2, etc.)
-  - Clean architecture for future expansion
+  - Automatic filesystem detection
+  - Clean architecture for multiple filesystem support
+- **FAT12 Filesystem**:
+  - Read files from FAT12-formatted floppy disks
+  - Boot sector and BPB parsing
+  - FAT table and cluster chain navigation
+  - Root directory parsing
+  - File listing and reading from disk
+  - Persistent storage support
+  - Read-only mode (write support planned)
 - **ATA PIO Driver**: Primary ATA controller support
   - Read/write sectors using PIO mode
   - LBA28 addressing (up to 128GB disks)
@@ -57,7 +65,7 @@
   - Maximum filename length: 31 characters + null terminator
   - Supports basic operations: create, write, read, list, delete
   - Automatic null terminator for text files
-  - Backend implementation for filesystem abstraction layer
+  - Fallback when no disk filesystem detected
 
 ### Input
 - **Keyboard Driver**: PS/2 keyboard support

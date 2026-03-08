@@ -18,6 +18,8 @@ iso/
 .DS_Store
 Thumbs.db
 
-# Temporary files
+# Temporary files and folders
 *.tmp
 *.log
+*.img
+mnt/

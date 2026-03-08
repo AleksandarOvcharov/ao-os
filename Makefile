@@ -31,13 +31,14 @@ KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/serial.o \
               $(BUILD_DIR)/ata.o \
               $(BUILD_DIR)/ramfs.o \
+              $(BUILD_DIR)/fat12.o \
               $(BUILD_DIR)/fs.o \
               $(BUILD_DIR)/editor.o
 
 KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
 ISO_FILE = ao-os.iso
 
-.PHONY: all clean run iso
+.PHONY: all clean run run-disk floppy iso
 
 all: $(ISO_FILE)
 
@@ -104,6 +105,9 @@ $(BUILD_DIR)/ata.o: $(KERNEL_DIR)/drivers/ata.c | $(BUILD_DIR)
 $(BUILD_DIR)/ramfs.o: $(KERNEL_DIR)/fs/ramfs.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/fat12.o: $(KERNEL_DIR)/fs/fat12.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/fs.o: $(KERNEL_DIR)/fs/fs.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -131,6 +135,16 @@ run: $(KERNEL_BIN)
 
 run-iso: $(ISO_FILE)
 	qemu-system-i386 -cdrom $(ISO_FILE) -serial stdio
+
+run-disk: $(KERNEL_BIN)
+	@if [ ! -f floppy.img ]; then \
+		echo "Creating floppy.img..."; \
+		bash create_floppy.sh; \
+	fi
+	qemu-system-i386 -kernel $(KERNEL_BIN) -drive file=floppy.img,format=raw,if=ide -serial stdio
+
+floppy:
+	bash create_floppy.sh
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO_FILE)
