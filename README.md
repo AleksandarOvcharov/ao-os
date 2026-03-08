@@ -90,6 +90,7 @@ ao-os/
 - `echo <text>` - Print text to the screen
 - `about` - Display OS information with colors
 - `kernel -v` or `kernel --version` - Display kernel version and build information
+- `sysinfo` - Display system information (CPU, RAM, uptime)
 - `mem` - Display memory usage statistics
 - `uptime` - Display system uptime
 - `color <fg> <bg>` - Change terminal colors (e.g., `color light_green black`)

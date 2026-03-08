@@ -87,6 +87,8 @@ void shell_execute_command(const char* cmd) {
         cmd_about();
     } else if (strncmp(cmd, "kernel", cmd_len) == 0 && cmd_len == 6) {
         cmd_kernel(args);
+    } else if (strncmp(cmd, "sysinfo", cmd_len) == 0 && cmd_len == 7) {
+        cmd_sysinfo();
     } else if (strncmp(cmd, "mem", cmd_len) == 0 && cmd_len == 3) {
         cmd_mem();
     } else if (strncmp(cmd, "uptime", cmd_len) == 0 && cmd_len == 6) {

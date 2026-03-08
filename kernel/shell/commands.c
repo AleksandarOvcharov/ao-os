@@ -5,6 +5,7 @@
 #include "version.h"
 #include "memory.h"
 #include "timer.h"
+#include "cpu.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -18,6 +19,7 @@ void cmd_help(void) {
     terminal_writestring("  echo     - Print text to the screen\n");
     terminal_writestring("  about    - Display OS information\n");
     terminal_writestring("  kernel   - Kernel information (usage: kernel -v or --version)\n");
+    terminal_writestring("  sysinfo  - Display system information\n");
     terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  uptime   - Display system uptime\n");
     terminal_writestring("  color    - Change text color (usage: color <fg> <bg>)\n");
@@ -382,4 +384,83 @@ void cmd_uptime(void) {
     
     terminal_setcolor(label_color);
     terminal_writestring("\n");
+}
+
+void cmd_sysinfo(void) {
+    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    uint8_t value_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    
+    char cpu_vendor[13];
+    cpu_get_vendor(cpu_vendor);
+    
+    uint32_t ram_kb = cpu_detect_memory();
+    
+    uint32_t ticks = timer_get_ticks();
+    uint32_t seconds = ticks / TIMER_HZ;
+    
+    terminal_setcolor(title_color);
+    terminal_writestring("AO OS ");
+    terminal_setcolor(value_color);
+    terminal_writestring(KERNEL_VERSION_STRING);
+    terminal_writestring("\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("CPU:    ");
+    terminal_setcolor(value_color);
+    terminal_writestring(cpu_vendor);
+    terminal_writestring("\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("RAM:    ");
+    terminal_setcolor(value_color);
+    
+    char buffer[32];
+    int i = 0;
+    uint32_t temp = ram_kb;
+    if (temp == 0) {
+        buffer[i++] = '0';
+    } else {
+        char digits[12];
+        int j = 0;
+        while (temp > 0) {
+            digits[j++] = '0' + (temp % 10);
+            temp /= 10;
+        }
+        while (j > 0) {
+            buffer[i++] = digits[--j];
+        }
+    }
+    buffer[i++] = ' ';
+    buffer[i++] = 'K';
+    buffer[i++] = 'B';
+    buffer[i] = '\0';
+    terminal_writestring(buffer);
+    terminal_writestring("\n");
+    
+    terminal_setcolor(label_color);
+    terminal_writestring("Uptime: ");
+    terminal_setcolor(value_color);
+    
+    i = 0;
+    temp = seconds;
+    if (temp == 0) {
+        buffer[i++] = '0';
+    } else {
+        char digits[12];
+        int j = 0;
+        while (temp > 0) {
+            digits[j++] = '0' + (temp % 10);
+            temp /= 10;
+        }
+        while (j > 0) {
+            buffer[i++] = digits[--j];
+        }
+    }
+    buffer[i++] = 's';
+    buffer[i] = '\0';
+    terminal_writestring(buffer);
+    terminal_writestring("\n");
+    
+    terminal_setcolor(label_color);
 }

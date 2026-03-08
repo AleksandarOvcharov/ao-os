@@ -49,6 +49,7 @@
 - **help**: Display all available commands with descriptions
 - **about**: Show OS information with colored output
 - **kernel**: Display kernel version information (supports -v and --version flags)
+- **sysinfo**: Display system information (CPU vendor, RAM, uptime, OS version)
 - **mem**: Display memory usage statistics (total, used, free)
 - **uptime**: Display system uptime in human-readable format
 

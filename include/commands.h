@@ -11,5 +11,6 @@ void cmd_color(const char* args);
 void cmd_kernel(const char* args);
 void cmd_mem(void);
 void cmd_uptime(void);
+void cmd_sysinfo(void);
 
 #endif
