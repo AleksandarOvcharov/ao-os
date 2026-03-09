@@ -4,6 +4,7 @@
 #include "string.h"
 #include "commands.h"
 #include "fs.h"
+#include "aob.h"
 
 #define MAX_COMMAND_LENGTH 256
 #define HISTORY_SIZE 10
@@ -141,14 +142,79 @@ void shell_execute_command(const char* cmd) {
         cmd_reboot();
     } else if (strncmp(cmd, "shutdown", cmd_len) == 0 && cmd_len == 8) {
         cmd_shutdown();
+    } else if (strncmp(cmd, "divan", cmd_len) == 0 && cmd_len == 5) {
+        cmd_divan();
     } else {
-        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-        terminal_setcolor(error_color);
-        terminal_writestring("Unknown command: ");
-        terminal_writestring(cmd);
-        terminal_writestring("\n");
-        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
-        terminal_writestring("Type 'help' for available commands.\n");
+        // Check if command ends with .aob (AOB executable)
+        if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".aob", 4) == 0) {
+            // Execute AOB binary
+            aob_context_t ctx;
+            char filename[256];
+            memcpy(filename, cmd, cmd_len);
+            filename[cmd_len] = '\0';
+            
+            if (aob_load(filename, &ctx) == 0) {
+                aob_execute(&ctx);
+                aob_unload(&ctx);
+            } else {
+                uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                terminal_setcolor(error_color);
+                terminal_writestring("Error: Failed to load or execute ");
+                terminal_writestring(filename);
+                terminal_writestring("\n");
+                terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+            }
+        } else if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".bin", 4) == 0) {
+            // Execute raw binary
+            char filename[256];
+            memcpy(filename, cmd, cmd_len);
+            filename[cmd_len] = '\0';
+            
+            static char bin_buffer[16384];
+            uint32_t file_size;
+            
+            if (fs_read(filename, bin_buffer, &file_size) == 0) {
+                if (file_size > 0 && file_size <= 16384) {
+                    // Copy binary to fixed address 0x200000 so string literals
+                    // resolve correctly (compiled with -Ttext=0x200000)
+                    char* exec_addr = (char*)0x00200000;
+                    memcpy(exec_addr, bin_buffer, file_size);
+                    // Write kernel API pointers to fixed address 0x00090000
+                    typedef void (*putchar_fn)(char);
+                    typedef void (*writestring_fn)(const char*);
+                    typedef void (*setcolor_fn)(uint8_t);
+                    typedef void (*clear_fn)(void);
+                    volatile unsigned int* api = (volatile unsigned int*)0x00090000;
+                    api[0] = 0x414F4150; // magic
+                    api[1] = (unsigned int)(putchar_fn)terminal_putchar;
+                    api[2] = (unsigned int)(writestring_fn)terminal_writestring;
+                    api[3] = (unsigned int)(setcolor_fn)terminal_setcolor;
+                    api[4] = (unsigned int)(clear_fn)terminal_clear;
+                    void (*entry_func)(void) = (void (*)(void))exec_addr;
+                    entry_func();
+                } else {
+                    uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                    terminal_setcolor(error_color);
+                    terminal_writestring("Error: Binary size invalid (0 or >16KB)\n");
+                    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+                }
+            } else {
+                uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                terminal_setcolor(error_color);
+                terminal_writestring("Error: Failed to load ");
+                terminal_writestring(filename);
+                terminal_writestring("\n");
+                terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+            }
+        } else {
+            uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+            terminal_setcolor(error_color);
+            terminal_writestring("Unknown command: ");
+            terminal_writestring(cmd);
+            terminal_writestring("\n");
+            terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+            terminal_writestring("Type 'help' for available commands.\n");
+        }
     }
 }
 

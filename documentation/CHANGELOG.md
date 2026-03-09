@@ -2,6 +2,43 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [1.0.0] - AOB Executable Format
+
+### Added
+- **AOB (Aleksandar Ovcharov's Binary) executable format**
+  - Custom binary format with 128-byte header
+  - Magic number: `0x00424F41` ("AOB\0")
+  - Support for program name, entry point, and code size
+  - Version tracking and reserved fields for future expansion
+- **AOB loader and executor**
+  - `aob_load()` - Load and validate AOB files from filesystem
+  - `aob_execute()` - Execute AOB binaries in kernel mode
+  - `aob_unload()` - Clean up after execution
+- **Shell integration**
+  - Automatic detection of `.aob` files
+  - Execute binaries by typing filename: `hello.aob`
+  - Support for raw `.bin` files (no header required)
+  - Error handling for invalid or missing executables
+- **aobcompile tool**
+  - Command-line tool to create AOB files from raw binaries
+  - Usage: `aobcompile input.bin output.aob [program_name]`
+  - Validates code size and adds proper header
+- **Example programs**
+  - `hello.asm` - Simple "Hello from AOB!" example
+  - Documentation on writing AOB programs
+  - Build instructions and format specification
+
+### Changed
+- Kernel version bumped to 1.0.0 (major milestone!)
+- Shell now checks for executables before showing "Unknown command"
+
+### Technical Details
+- AOB files loaded into 16KB buffer
+- Programs execute in kernel mode (ring 0)
+- Direct VGA buffer access at 0xB8000
+- Programs must return with `ret` instruction
+- Maximum code size: ~16KB (minus header for AOB)
+
 ## [0.9.0] - Full Subdirectory Support
 
 ### Added

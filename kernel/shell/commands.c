@@ -13,6 +13,7 @@
 #include "editor.h"
 #include "installer.h"
 #include "keyboard.h"
+#include "aob.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -44,8 +45,12 @@ void cmd_help(void) {
     terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  uptime   - Display system uptime\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
-    terminal_writestring("  reboot   - Reboot the system\n");
-    terminal_writestring("  shutdown - Shutdown the system\n");
+    terminal_writestring("  reboot   - Restart the computer\n");
+    terminal_writestring("  shutdown - Shutdown the computer\n");
+    terminal_writestring("\n");
+    terminal_writestring("Executables:\n");
+    terminal_writestring("  *.aob    - Run AOB executable (e.g., hello.aob)\n");
+    terminal_writestring("  *.bin    - Run raw binary (e.g., hello.bin)\n");
     
     terminal_writestring("\nAvailable colors:\n");
     terminal_writestring("  black, blue, green, cyan, red, magenta, brown,\n");
@@ -923,3 +928,17 @@ void cmd_pwd(void) {
     terminal_writestring("\n");
     terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 }
+
+void cmd_divan(void) {
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+    terminal_writestring("Ne\n");
+}
+

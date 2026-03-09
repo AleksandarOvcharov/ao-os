@@ -26,5 +26,6 @@ void cmd_mkdir(const char* args);
 void cmd_rmdir(const char* args);
 void cmd_cd(const char* args);
 void cmd_pwd(void);
+void cmd_divan(void);
 
 #endif

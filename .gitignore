@@ -1,11 +1,20 @@
 # Build artifacts
 *.o
-*.bin
-*.iso
 *.elf
 build/
 bin/
+
+# Disk and ISO images
+*.img
+*.iso
 iso/
+
+# Compiled example binaries and AOB files
+examples/*.bin
+examples/*.aob
+
+# Compiled tools binaries
+tools/aobcompile
 
 # Editor files
 *.swp
@@ -18,9 +27,8 @@ iso/
 .DS_Store
 Thumbs.db
 
-# Temporary files and folders
+# Temporary files
 *.tmp
 *.log
-*.img
 mnt/
 temp/

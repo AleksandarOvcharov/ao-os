@@ -5,6 +5,50 @@
 #include "klog.h"
 #include "vga.h"
 
+#define FAT12_ATTR_LFN 0x0F
+
+// LFN entry byte offsets (raw access to avoid packed member warnings)
+// order:1, name1:5 chars at offset 1, attr at 11, type at 12, checksum at 13
+// name2:6 chars at offset 14, first_cluster at 26, name3:2 chars at offset 28
+
+// Read one UTF-16LE char from a packed LFN field (2 bytes at byte offset)
+static uint16_t fat12_lfn_char(const uint8_t* raw, int idx) {
+    return (uint16_t)raw[idx * 2] | ((uint16_t)raw[idx * 2 + 1] << 8);
+}
+
+// Extract LFN from preceding LFN entries into buf (ASCII only, max 255 chars)
+static void fat12_read_lfn(fat12_dir_entry_t* entries, int sfn_idx, char* buf, int buf_size) {
+    char tmp[256];
+    int tmp_len = 0;
+    int seq[20];
+    int seq_count = 0;
+    for (int k = sfn_idx - 1; k >= 0 && seq_count < 20; k--) {
+        uint8_t attr = (uint8_t)entries[k].attributes;
+        if (attr != FAT12_ATTR_LFN) break;
+        const uint8_t* raw = (const uint8_t*)&entries[k];
+        uint8_t order = raw[0];
+        seq[seq_count++] = k;
+        if (order & 0x40) break;
+    }
+    // Reverse to get correct order (seq[seq_count-1] is first chunk)
+    for (int k = seq_count - 1; k >= 0 && tmp_len < buf_size - 1; k--) {
+        const uint8_t* raw = (const uint8_t*)&entries[seq[k]];
+        // name1: bytes 1-10 (5 chars), name2: bytes 14-25 (6 chars), name3: bytes 28-31 (2 chars)
+        int offsets[3] = {1, 14, 28};
+        int lens[3]    = {5,  6,  2};
+        for (int p = 0; p < 3 && tmp_len < buf_size - 1; p++) {
+            for (int c = 0; c < lens[p] && tmp_len < buf_size - 1; c++) {
+                uint16_t ch = fat12_lfn_char(raw + offsets[p], c);
+                if (ch == 0x0000 || ch == 0xFFFF) goto done;
+                tmp[tmp_len++] = (char)(ch & 0x7F);
+            }
+        }
+    }
+done:
+    tmp[tmp_len] = '\0';
+    for (int k = 0; k <= tmp_len && k < buf_size; k++) buf[k] = tmp[k];
+}
+
 static fat12_bpb_t bpb;
 static uint8_t fat_table[FAT12_SECTOR_SIZE * 9];
 static fat12_dir_entry_t root_dir[224];
@@ -178,6 +222,34 @@ static int fat12_compare_filename(const char* fat_name, const char* search_name)
     return 1;
 }
 
+// Case-insensitive string compare for LFN
+static int fat12_stricmp(const char* a, const char* b) {
+    while (*a && *b) {
+        char ca = *a, cb = *b;
+        if (ca >= 'a' && ca <= 'z') ca -= 32;
+        if (cb >= 'a' && cb <= 'z') cb -= 32;
+        if (ca != cb) return 0;
+        a++; b++;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+// Check if entry i matches search_name via LFN or 8.3
+static int fat12_entry_matches(fat12_dir_entry_t* entries, int i, const char* search_name) {
+    // Try LFN first
+    char lfn[256];
+    lfn[0] = '\0';
+    fat12_read_lfn(entries, i, lfn, 256);
+    if (lfn[0] != '\0' && fat12_stricmp(lfn, search_name)) return 1;
+
+    // Fall back to 8.3
+    char fat_filename[12];
+    memcpy(fat_filename, entries[i].filename, 8);
+    memcpy(fat_filename + 8, entries[i].extension, 3);
+    fat_filename[11] = '\0';
+    return fat12_compare_filename(fat_filename, search_name);
+}
+
 void fat12_init(void) {
     klog_info("Initializing FAT12 filesystem...");
     
@@ -235,13 +307,9 @@ int fat12_read(const char* name, char* buffer, uint32_t* size) {
         if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
         if (current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY) continue;
         if (current_dir_entries[i].attributes & FAT12_ATTR_VOLUME_ID) continue;
+        if ((uint8_t)current_dir_entries[i].attributes == FAT12_ATTR_LFN) continue;
         
-        char fat_filename[12];
-        memcpy(fat_filename, current_dir_entries[i].filename, 8);
-        memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
-        fat_filename[11] = '\0';
-        
-        if (fat12_compare_filename(fat_filename, name)) {
+        if (fat12_entry_matches(current_dir_entries, i, name)) {
             uint16_t cluster = current_dir_entries[i].first_cluster_low;
             uint32_t file_size = current_dir_entries[i].file_size;
             
@@ -486,13 +554,9 @@ int fat12_delete(const char* name) {
     for (int i = 0; i < 224; i++) {
         if (current_dir_entries[i].filename[0] == 0x00) break;
         if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
+        if ((uint8_t)current_dir_entries[i].attributes == FAT12_ATTR_LFN) continue;
         
-        char fat_filename[12];
-        memcpy(fat_filename, current_dir_entries[i].filename, 8);
-        memcpy(fat_filename + 8, current_dir_entries[i].extension, 3);
-        fat_filename[11] = '\0';
-        
-        if (fat12_compare_filename(fat_filename, name)) {
+        if (fat12_entry_matches(current_dir_entries, i, name)) {
             uint16_t cluster = current_dir_entries[i].first_cluster_low;
             
             while (cluster >= 2 && cluster < 0xFF8) {
@@ -501,6 +565,11 @@ int fat12_delete(const char* name) {
                 cluster = next_cluster;
             }
             
+            // Also mark LFN entries as deleted
+            for (int k = i - 1; k >= 0; k--) {
+                if ((uint8_t)current_dir_entries[k].attributes != FAT12_ATTR_LFN) break;
+                current_dir_entries[k].filename[0] = 0xE5;
+            }
             current_dir_entries[i].filename[0] = 0xE5;
             
             fat12_write_fat_table();
@@ -531,33 +600,46 @@ int fat12_list(void** entries, int* count) {
         if (current_dir_entries[i].filename[0] == 0x00) break;
         if ((uint8_t)current_dir_entries[i].filename[0] == 0xE5) continue;
         if (current_dir_entries[i].attributes & FAT12_ATTR_VOLUME_ID) continue;
+        // Skip LFN entries - they will be read via fat12_read_lfn
+        if ((uint8_t)current_dir_entries[i].attributes == FAT12_ATTR_LFN) continue;
+        // Skip hidden and system
+        if (current_dir_entries[i].attributes & 0x02) continue;
+        if (current_dir_entries[i].attributes & 0x04) continue;
         
-        // Skip entries with invalid attributes (system, hidden, etc.)
-        if (current_dir_entries[i].attributes & 0x02) continue; // Hidden
-        if (current_dir_entries[i].attributes & 0x04) continue; // System
-        
-        // Allow empty files (cluster 0 with size 0 is valid)
-        // Skip only truly invalid entries
         if (current_dir_entries[i].first_cluster_low == 0 && current_dir_entries[i].file_size > 0) continue;
         if (current_dir_entries[i].first_cluster_low == 0 && !(current_dir_entries[i].attributes & FAT12_ATTR_DIRECTORY)) {
-            // Empty file is OK, but must have valid name
             if (current_dir_entries[i].filename[0] == 0x00 || current_dir_entries[i].filename[0] == ' ') continue;
         }
         
         memset(fat12_file_list[*count].name, 0, FS_MAX_FILENAME);
         
-        int name_pos = 0;
-        for (int j = 0; j < 8 && current_dir_entries[i].filename[j] != ' '; j++) {
-            fat12_file_list[*count].name[name_pos++] = current_dir_entries[i].filename[j];
-        }
+        // Try to read LFN first
+        char lfn_name[256];
+        lfn_name[0] = '\0';
+        fat12_read_lfn(current_dir_entries, i, lfn_name, 256);
         
-        if (current_dir_entries[i].extension[0] != ' ') {
-            fat12_file_list[*count].name[name_pos++] = '.';
-            for (int j = 0; j < 3 && current_dir_entries[i].extension[j] != ' '; j++) {
-                fat12_file_list[*count].name[name_pos++] = current_dir_entries[i].extension[j];
+        if (lfn_name[0] != '\0') {
+            // Use long filename
+            int k = 0;
+            while (lfn_name[k] && k < FS_MAX_FILENAME - 1) {
+                fat12_file_list[*count].name[k] = lfn_name[k];
+                k++;
             }
+            fat12_file_list[*count].name[k] = '\0';
+        } else {
+            // Fall back to 8.3 short name
+            int name_pos = 0;
+            for (int j = 0; j < 8 && current_dir_entries[i].filename[j] != ' '; j++) {
+                fat12_file_list[*count].name[name_pos++] = current_dir_entries[i].filename[j];
+            }
+            if (current_dir_entries[i].extension[0] != ' ') {
+                fat12_file_list[*count].name[name_pos++] = '.';
+                for (int j = 0; j < 3 && current_dir_entries[i].extension[j] != ' '; j++) {
+                    fat12_file_list[*count].name[name_pos++] = current_dir_entries[i].extension[j];
+                }
+            }
+            fat12_file_list[*count].name[name_pos] = '\0';
         }
-        fat12_file_list[*count].name[name_pos] = '\0';
         
         fat12_file_list[*count].size = current_dir_entries[i].file_size;
         fat12_file_list[*count].used = 1;

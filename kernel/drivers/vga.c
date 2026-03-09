@@ -18,6 +18,7 @@ static size_t terminal_column;
 static uint8_t terminal_color;
 static uint16_t* vga_memory;
 static int cursor_visible = 1;
+static int rendering_enabled = 1;
 
 void terminal_initialize(void) {
     current_line = 0;
@@ -42,6 +43,8 @@ void terminal_setcolor(uint8_t color) {
 }
 
 void terminal_render(void) {
+    if (!rendering_enabled) return;  // Skip rendering if disabled
+    
     int start_line = current_line - TERM_HEIGHT + 1 - scroll_offset;
     if (start_line < 0) start_line = 0;
     
@@ -209,4 +212,15 @@ void terminal_set_cursor(int row, int col) {
         terminal_column = col;
     }
     terminal_update_cursor();
+}
+
+void terminal_disable_rendering(void) {
+    rendering_enabled = 0;
+    terminal_hide_cursor();
+}
+
+void terminal_enable_rendering(void) {
+    rendering_enabled = 1;
+    terminal_render();
+    terminal_show_cursor();
 }

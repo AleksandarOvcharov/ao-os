@@ -1,6 +1,6 @@
 # AO OS Features
 
-## AO-OS Features (v0.9.0) - Aurora)
+## AO-OS Features (v1.0.0 - Aurora)
 
 ### Core System
 - **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
@@ -38,6 +38,36 @@
   - Color preservation in history
 - **Special Characters**: Support for newline, tab, and backspace
 - **Serial Console**: COM1 serial port output for debugging (use with `qemu -serial stdio`)
+
+### Executable Format
+- **AOB (Aleksandar Ovcharov's Binary) Format**:
+  - Custom executable format with 128-byte header
+  - Magic number validation: `0x00424F41` ("AOB\0")
+  - Program metadata: name, version, entry point, code size
+  - Direct execution from shell by typing filename
+  - Example: `hello.aob` runs the program
+- **Raw Binary (.bin) Support**:
+  - Execute raw x86 machine code directly
+  - No header required - pure binary execution
+  - Example: `hello.bin` runs the raw binary
+- **AOB Loader**:
+  - Validates magic number and version
+  - Loads code into memory buffer
+  - Executes at specified entry point
+  - Returns control to kernel after execution
+- **aobcompile Tool**:
+  - Converts raw binary to AOB format
+  - Adds proper header with metadata
+  - Command-line interface: `aobcompile input.bin output.aob [name]`
+  - Validates code size limits
+  - Maximum executable size: 16KB
+- **ao.h - User Program API**:
+  - Kernel API for C programs
+  - Terminal I/O functions: `ao_print()`, `ao_println()`, `ao_putchar()`
+  - Color control: `ao_setcolor()`
+  - String utilities: `ao_strlen()`, `ao_strcmp()`, `ao_strcpy()`
+  - Memory utilities: `ao_memset()`, `ao_memcpy()`
+  - Integer printing: `ao_printint()`
 
 ### Storage
 - **Filesystem Abstraction Layer**:

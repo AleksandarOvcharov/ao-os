@@ -34,7 +34,8 @@ KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
               $(BUILD_DIR)/fat12.o \
               $(BUILD_DIR)/fs.o \
               $(BUILD_DIR)/editor.o \
-              $(BUILD_DIR)/installer.o
+              $(BUILD_DIR)/installer.o \
+              $(BUILD_DIR)/aob.o
 
 KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
 ISO_FILE = ao-os.iso
@@ -116,6 +117,9 @@ $(BUILD_DIR)/editor.o: $(KERNEL_DIR)/editor/editor.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/installer.o: $(KERNEL_DIR)/installer/installer.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/aob.o: $(KERNEL_DIR)/aob/aob.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(KERNEL_BIN): $(BOOT_OBJ) $(KERNEL_OBJS)
