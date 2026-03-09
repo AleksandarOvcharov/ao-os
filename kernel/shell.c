@@ -175,6 +175,16 @@ void shell_execute_command(const char* cmd) {
         cmd_shutdown();
     } else if (strncmp(cmd, "divan", cmd_len) == 0 && cmd_len == 5) {
         cmd_divan();
+    } else if (strncmp(cmd, "cp", cmd_len) == 0 && cmd_len == 2) {
+        cmd_cp(args);
+    } else if (strncmp(cmd, "mv", cmd_len) == 0 && cmd_len == 2) {
+        cmd_mv(args);
+    } else if (strncmp(cmd, "rename", cmd_len) == 0 && cmd_len == 6) {
+        cmd_rename(args);
+    } else if (strncmp(cmd, "which", cmd_len) == 0 && cmd_len == 5) {
+        cmd_which(args);
+    } else if (strncmp(cmd, "tree", cmd_len) == 0 && cmd_len == 4) {
+        cmd_tree();
     } else {
         // Check if command ends with .aob (AOB executable)
         if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".aob", 4) == 0) {

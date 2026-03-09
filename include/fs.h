@@ -23,5 +23,6 @@ int fs_mkdir(const char* name);
 int fs_rmdir(const char* name);
 int fs_chdir(const char* name);
 const char* fs_getcwd(void);
+void fs_get_disk_info(uint32_t* total_kb, uint32_t* used_kb, uint32_t* free_kb);
 
 #endif

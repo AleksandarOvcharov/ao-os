@@ -91,6 +91,31 @@ static uint16_t fat12_find_free_cluster(void) {
     return 0;
 }
 
+void fat12_get_disk_info(uint32_t* total_kb, uint32_t* used_kb, uint32_t* free_kb) {
+    if (!fat12_initialized) {
+        *total_kb = *used_kb = *free_kb = 0;
+        return;
+    }
+
+    uint32_t total_sectors = bpb.total_sectors ? bpb.total_sectors : bpb.large_sector_count;
+    uint32_t bytes_per_cluster = bpb.sectors_per_cluster * bpb.bytes_per_sector;
+    uint32_t data_start = bpb.reserved_sectors +
+                          (bpb.fat_count * bpb.sectors_per_fat) +
+                          ((bpb.root_dir_entries * 32 + 511) / 512);
+    uint32_t data_sectors = (total_sectors > data_start) ? (total_sectors - data_start) : 0;
+    uint32_t total_clusters = data_sectors / bpb.sectors_per_cluster;
+
+    uint32_t free_clusters = 0;
+    for (uint16_t c = 2; c < (uint16_t)(total_clusters + 2); c++) {
+        if (fat12_get_next_cluster(c) == 0x000) free_clusters++;
+    }
+
+    uint32_t used_clusters = total_clusters - free_clusters;
+    *total_kb = (total_clusters * bytes_per_cluster) / 1024;
+    *used_kb  = (used_clusters  * bytes_per_cluster) / 1024;
+    *free_kb  = (free_clusters  * bytes_per_cluster) / 1024;
+}
+
 // Removed - now search current_dir_entries inline in each function
 
 static void fat12_write_fat_table(void) {

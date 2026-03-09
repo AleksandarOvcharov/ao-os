@@ -42,6 +42,11 @@ void cmd_help(void) {
     terminal_writestring("  rmdir    - Remove directory (usage: rmdir <dirname>)\n");
     terminal_writestring("  cd       - Change directory (usage: cd <dirname>)\n");
     terminal_writestring("  pwd      - Print working directory\n");
+    terminal_writestring("  cp       - Copy file (usage: cp <src> <dest>)\n");
+    terminal_writestring("  mv       - Move file (usage: mv <src> <dest>)\n");
+    terminal_writestring("  rename   - Rename file (usage: rename <old> <new>)\n");
+    terminal_writestring("  which    - Find command or file (usage: which <name>)\n");
+    terminal_writestring("  tree     - Show directory tree\n");
     terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  uptime   - Display system uptime\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
@@ -82,7 +87,7 @@ void cmd_about(void) {
     terminal_setcolor(normal_color);
     terminal_writestring("Version: ");
     terminal_setcolor(highlight_color);
-    terminal_writestring("0.2.0\n");
+    terminal_writestring(KERNEL_VERSION_STRING "\n");
     
     terminal_setcolor(normal_color);
     terminal_writestring("Architecture: ");
@@ -474,7 +479,78 @@ void cmd_sysinfo(void) {
     buffer[i] = '\0';
     terminal_writestring(buffer);
     terminal_writestring("\n");
-    
+
+    // Disk space
+    uint32_t total_kb, used_kb, free_kb;
+    fs_get_disk_info(&total_kb, &used_kb, &free_kb);
+
+    if (total_kb > 0) {
+        uint8_t warn_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+
+        // Helper lambda-like macro to print a uint32 KB value
+        #define PRINT_KB(val) do { \
+            uint32_t _v = (val); \
+            char _d[12]; int _j = 0; \
+            if (_v == 0) { terminal_putchar('0'); } \
+            else { while (_v > 0) { _d[_j++] = '0' + (_v % 10); _v /= 10; } \
+                   while (_j > 0) terminal_putchar(_d[--_j]); } \
+            terminal_writestring(" KB"); \
+        } while(0)
+
+        terminal_setcolor(label_color);
+        terminal_writestring("Disk:   ");
+        terminal_setcolor(value_color);
+        PRINT_KB(total_kb);
+        terminal_writestring(" total  ");
+
+        terminal_setcolor(value_color);
+        PRINT_KB(used_kb);
+        terminal_writestring(" used  ");
+
+        // Free in a different color if low (<10%)
+        if (free_kb * 10 < total_kb) {
+            terminal_setcolor(warn_color);
+        } else {
+            terminal_setcolor(value_color);
+        }
+        PRINT_KB(free_kb);
+        terminal_writestring(" free\n");
+
+        // Usage bar [##########..........] 20 chars
+        terminal_setcolor(label_color);
+        terminal_writestring("        [");
+        int filled = (total_kb > 0) ? (int)((used_kb * 20) / total_kb) : 0;
+        for (int b = 0; b < 20; b++) {
+            if (b < filled) {
+                terminal_setcolor(value_color);
+                terminal_putchar('#');
+            } else {
+                terminal_setcolor(label_color);
+                terminal_putchar('.');
+            }
+        }
+        terminal_setcolor(label_color);
+        terminal_writestring("] ");
+
+        // Percentage
+        uint32_t pct = (total_kb > 0) ? ((used_kb * 100) / total_kb) : 0;
+        char pct_buf[8]; int pi = 0;
+        if (pct == 0) { pct_buf[pi++] = '0'; }
+        else { char pd[4]; int pj = 0;
+               uint32_t pv = pct;
+               while (pv > 0) { pd[pj++] = '0' + (pv % 10); pv /= 10; }
+               while (pj > 0) pct_buf[pi++] = pd[--pj]; }
+        pct_buf[pi++] = '%'; pct_buf[pi] = '\0';
+        terminal_setcolor(value_color);
+        terminal_writestring(pct_buf);
+        terminal_writestring("\n");
+
+        #undef PRINT_KB
+    } else {
+        terminal_setcolor(label_color);
+        terminal_writestring("Disk:   N/A (ramfs)\n");
+    }
+
     terminal_setcolor(label_color);
 }
 
@@ -940,5 +1016,210 @@ void cmd_divan(void) {
     terminal_writestring("Ne\n");
     terminal_writestring("Ne\n");
     terminal_writestring("Ne\n");
+}
+
+// Helper: split "src dest" into two tokens
+static int split_two_args(const char* args, char* a, int alen, char* b, int blen) {
+    int i = 0, j = 0;
+    while (args[i] && args[i] != ' ' && j < alen - 1) a[j++] = args[i++];
+    a[j] = '\0';
+    while (args[i] == ' ') i++;
+    j = 0;
+    while (args[i] && j < blen - 1) b[j++] = args[i++];
+    b[j] = '\0';
+    return (a[0] && b[0]) ? 0 : -1;
+}
+
+void cmd_cp(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: cp <src> <dest>\n");
+        return;
+    }
+
+    char src[FS_MAX_FILENAME], dest[FS_MAX_FILENAME];
+    if (split_two_args(args, src, FS_MAX_FILENAME, dest, FS_MAX_FILENAME) != 0) {
+        terminal_writestring("Usage: cp <src> <dest>\n");
+        return;
+    }
+
+    static char buf[FS_MAX_FILESIZE];
+    uint32_t size;
+    if (fs_read(src, buf, &size) != 0) {
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
+        terminal_writestring("Error: Source not found: ");
+        terminal_writestring(src);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+        return;
+    }
+    if (fs_create(dest, buf, size) != 0) {
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
+        terminal_writestring("Error: Could not create: ");
+        terminal_writestring(dest);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+        return;
+    }
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK));
+    terminal_writestring(src);
+    terminal_writestring(" -> ");
+    terminal_writestring(dest);
+    terminal_writestring("\n");
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+}
+
+void cmd_mv(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: mv <src> <dest>\n");
+        return;
+    }
+
+    char src[FS_MAX_FILENAME], dest[FS_MAX_FILENAME];
+    if (split_two_args(args, src, FS_MAX_FILENAME, dest, FS_MAX_FILENAME) != 0) {
+        terminal_writestring("Usage: mv <src> <dest>\n");
+        return;
+    }
+
+    static char buf[FS_MAX_FILESIZE];
+    uint32_t size;
+    if (fs_read(src, buf, &size) != 0) {
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
+        terminal_writestring("Error: Source not found: ");
+        terminal_writestring(src);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+        return;
+    }
+    if (fs_create(dest, buf, size) != 0) {
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
+        terminal_writestring("Error: Could not create: ");
+        terminal_writestring(dest);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+        return;
+    }
+    fs_delete(src);
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK));
+    terminal_writestring(src);
+    terminal_writestring(" => ");
+    terminal_writestring(dest);
+    terminal_writestring("\n");
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+}
+
+void cmd_rename(const char* args) {
+    // rename is just mv
+    cmd_mv(args);
+}
+
+void cmd_which(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: which <name>\n");
+        return;
+    }
+
+    // Built-in commands list
+    static const char* builtins[] = {
+        "help","clear","echo","about","kernel","sysinfo","diskinfo",
+        "sconsole","checkfs","install","ls","cat","edit","write","rm",
+        "touch","mkdir","rmdir","cd","pwd","mem","uptime","color",
+        "reboot","shutdown","cp","mv","rename","which","tree",
+        "divan", 0
+    };
+
+    for (int i = 0; builtins[i]; i++) {
+        if (strcmp(builtins[i], args) == 0) {
+            terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK));
+            terminal_writestring(args);
+            terminal_writestring(": shell built-in\n");
+            terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+            return;
+        }
+    }
+
+    // Search filesystem for a matching .bin or .aob
+    fs_file_info_t* files;
+    int count;
+    if (fs_list(&files, &count) == 0) {
+        for (int i = 0; i < count; i++) {
+            if (!files[i].used || files[i].is_directory) continue;
+            if (strcmp(files[i].name, args) == 0) {
+                terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK));
+                terminal_writestring(files[i].name);
+                terminal_writestring(": executable on disk\n");
+                terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+                return;
+            }
+        }
+    }
+
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
+    terminal_writestring(args);
+    terminal_writestring(": not found\n");
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+}
+
+// Helper to print uint32 without libc
+static void print_uint32(uint32_t n) {
+    char tmp[12];
+    int t = 0;
+    if (n == 0) { terminal_putchar('0'); return; }
+    while (n > 0) { tmp[t++] = '0' + (n % 10); n /= 10; }
+    while (t > 0) terminal_putchar(tmp[--t]);
+}
+
+static void tree_print_dir(const char* path, int depth) {
+    fs_file_info_t* files;
+    int count;
+
+    // Enter directory
+    if (depth > 0) {
+        if (fs_chdir(path) != 0) return;
+    }
+
+    if (fs_list(&files, &count) != 0) return;
+
+    uint8_t dir_color  = vga_entry_color(VGA_COLOR_LIGHT_BLUE,  VGA_COLOR_BLACK);
+    uint8_t file_color = vga_entry_color(VGA_COLOR_LIGHT_GREY,  VGA_COLOR_BLACK);
+    uint8_t size_color = vga_entry_color(VGA_COLOR_DARK_GREY,   VGA_COLOR_BLACK);
+
+    for (int i = 0; i < count; i++) {
+        if (!files[i].used) continue;
+
+        // Indent
+        for (int d = 0; d < depth; d++) terminal_writestring("  ");
+        terminal_writestring("|-- ");
+
+        if (files[i].is_directory) {
+            terminal_setcolor(dir_color);
+            terminal_writestring("[");
+            terminal_writestring(files[i].name);
+            terminal_writestring("]\n");
+            terminal_setcolor(file_color);
+            // Recurse (max depth 4 to avoid infinite loops)
+            if (depth < 4) {
+                tree_print_dir(files[i].name, depth + 1);
+                // Go back up
+                fs_chdir("..");
+            }
+        } else {
+            terminal_setcolor(file_color);
+            terminal_writestring(files[i].name);
+            terminal_setcolor(size_color);
+            terminal_writestring(" (");
+            print_uint32(files[i].size);
+            terminal_writestring("B)\n");
+        }
+    }
+    terminal_setcolor(file_color);
+}
+
+void cmd_tree(void) {
+    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    terminal_setcolor(title_color);
+    terminal_writestring(fs_getcwd());
+    terminal_writestring("\n");
+    tree_print_dir(".", 0);
+    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 }
 

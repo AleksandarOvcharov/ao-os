@@ -27,5 +27,10 @@ void cmd_rmdir(const char* args);
 void cmd_cd(const char* args);
 void cmd_pwd(void);
 void cmd_divan(void);
+void cmd_cp(const char* args);
+void cmd_mv(const char* args);
+void cmd_rename(const char* args);
+void cmd_which(const char* args);
+void cmd_tree(void);
 
 #endif

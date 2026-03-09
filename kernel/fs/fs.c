@@ -101,3 +101,13 @@ const char* fs_getcwd(void) {
     }
     return ramfs_getcwd();
 }
+
+void fs_get_disk_info(uint32_t* total_kb, uint32_t* used_kb, uint32_t* free_kb) {
+    if (use_fat12) {
+        fat12_get_disk_info(total_kb, used_kb, free_kb);
+    } else {
+        *total_kb = 0;
+        *used_kb  = 0;
+        *free_kb  = 0;
+    }
+}

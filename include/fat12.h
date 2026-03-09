@@ -55,5 +55,6 @@ int fat12_mkdir(const char* name);
 int fat12_rmdir(const char* name);
 int fat12_chdir(const char* name);
 const char* fat12_getcwd(void);
+void fat12_get_disk_info(uint32_t* total_kb, uint32_t* used_kb, uint32_t* free_kb);
 
 #endif
