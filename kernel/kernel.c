@@ -9,6 +9,13 @@
 #include "ata.h"
 #include "fs.h"
 #include "syscall.h"
+#include "installer.h"
+
+/* Boot flag written by stage2 bootloader at physical 0x7000:
+ *   0x00 = normal boot
+ *   0x01 = reinstall */
+#define BOOT_FLAG_ADDR  ((volatile uint8_t*)0x7000)
+#define BOOT_FLAG_REINSTALL  0x01
 
 void kernel_main(void) {
     terminal_initialize();
@@ -46,7 +53,13 @@ void kernel_main(void) {
     klog_info("Kernel initialization complete!");
     timer_wait(50);
     terminal_writestring("\n");
-    
+
+    uint8_t boot_flag = *BOOT_FLAG_ADDR;
+    if (boot_flag == BOOT_FLAG_REINSTALL) {
+        klog_info("Reinstall requested by bootloader");
+        installer_run();
+    }
+
     shell_init();
     shell_run();
     

@@ -176,14 +176,15 @@ run: iso
 	qemu-system-i386 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
 	                 -serial stdio -m 32
 
-run-disk: iso
-	@if [ ! -f floppy.img ]; then \
-		echo "Creating floppy.img..."; \
-		bash create_floppy.sh; \
-	fi
+floppy.img:
+	@echo "Creating floppy.img..."
+	dd if=/dev/zero of=floppy.img bs=512 count=2880 2>/dev/null
+	mkdosfs -F 12 floppy.img 2>/dev/null || mformat -i floppy.img -f 1440 :: 2>/dev/null || true
+
+run-disk: iso floppy.img
 	qemu-system-i386 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
 	                 -drive file=floppy.img,format=raw,if=ide \
 	                 -serial stdio -m 32
 
 clean:
-	rm -rf $(BUILD_DIR) $(ISO_FILE)
+	rm -rf $(BUILD_DIR) $(ISO_FILE) floppy.img

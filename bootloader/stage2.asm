@@ -1,213 +1,717 @@
 ; AO OS Stage 2 Bootloader
-; Loaded at 0x0000:0x7E00 by stage1.
+; Boot flag @ 0x7000: 0x00=normal boot, 0x01=reinstall
 ;
-; Strategy:
-;   1. Enable A20
-;   2. Enter unreal mode (load 4GB flat data descriptor into FS,
-;      then drop back to real mode — FS keeps its 4GB limit)
-;   3. Read kernel sectors (LBA 5+) in 32-sector batches using
-;      INT 13h CHS (simple, works on all BIOS/QEMU)
-;   4. Copy each batch from bounce buffer (0x9000) to dest (0x100000+)
-;      using FS-relative 32-bit addressing with 'a32' prefix
-;   5. Load GDT, enter 32-bit protected mode, jump to 0x100000
+; VGA direct-write layout (0xB800):
+;   Each cell = [char][attr], row*80+col)*2
+;   row*80 = (row<<6)+(row<<4)  — no imul needed
+;
+; Colour palette:
+;   0x17 = white on blue        (background)
+;   0x07 = dark white on black  (dim)
+;   0x1F = bright white on blue (normal item)
+;   0x70 = black on light grey  (normal item alt)
+;   0x1E = yellow on blue       (selected row)
+;   0x3F = bright white on cyan (selected row alt)
+;   0x4F = white on red         (warning/error)
+;   0x4E = yellow on red        (warning title)
+;   0x2F = bright white on green (Yes selected)
+;   0x1A = bright green on blue (Yes normal)
+
+%define VGA_SEG  0xB800
+
+; ── Macro: compute VGA offset DI = (row*80 + col)*2 ─────────────────
+; row in BH, col in BL. Uses AX as scratch, trashes nothing else.
+%macro VGA_OFFSET 0
+    push ax
+    xor  ax, ax
+    mov  al, bh          ; ax = row
+    mov  di, ax
+    shl  di, 6           ; di = row*64
+    shl  ax, 4           ; ax = row*16
+    add  di, ax          ; di = row*80
+    xor  ah, ah
+    mov  al, bl
+    add  di, ax          ; di = row*80+col
+    shl  di, 1           ; *2 = byte offset
+    pop  ax
+%endmacro
 
 [BITS 16]
 [ORG 0x7E00]
 
+stage2_main:
     cli
-    xor ax, ax
-    mov ds, ax
-    mov es, ax
-    mov ss, ax
-    mov sp, 0x7C00
+    xor  ax, ax
+    mov  ds, ax
+    mov  es, ax
+    mov  ss, ax
+    mov  sp, 0x7C00
     sti
+    mov  [boot_drive], dl
 
-    mov [boot_drive], dl
+    ; ── A20 ──────────────────────────────────────────────────────────
+    mov  ax, 0x2401
+    int  0x15
 
-    mov si, msg_stage2
-    call print16
-
-    ; ── A20 via BIOS ────────────────────────────────────────────────
-    mov ax, 0x2401
-    int 0x15
-
-    ; ── Unreal mode: give FS a 4 GB limit ───────────────────────────
+    ; ── Unreal mode: FS = 4 GB flat ──────────────────────────────────
     cli
     lgdt [gdt_ptr]
-
-    mov eax, cr0
-    or  al, 1
-    mov cr0, eax            ; enter pmode briefly
-
-    mov ax, 0x10            ; flat data selector
-    mov fs, ax              ; FS now has 4 GB limit
-
-    and al, 0xFE
-    mov cr0, eax            ; back to real mode; FS limit is still 4 GB
+    mov  eax, cr0
+    or   al, 1
+    mov  cr0, eax
+    mov  ax, 0x10
+    mov  fs, ax
+    and  al, 0xFE
+    mov  cr0, eax
     sti
 
-    ; ── Read kernel from disk into 0x100000 ─────────────────────────
-    ; Disk layout: LBA 0 = stage1, LBA 1-4 = stage2, LBA 5+ = kernel
-    ; CHS for LBA on QEMU HDD (63 spt, 255 heads):
-    ;   C = LBA / (255*63),  H = (LBA / 63) % 255,  S = (LBA % 63)+1
+    ; ── VGA mode 3, hide cursor ───────────────────────────────────────
+    mov  ax, 0x0003
+    int  0x10
+    mov  ah, 0x01
+    mov  cx, 0x2000        ; hide cursor (start > end)
+    int  0x10
 
-    mov dword [lba_cur],  5         ; first kernel LBA
-    mov dword [dest],     0x100000  ; load to 1 MB
-    mov word  [remaining], KERNEL_SECS
+    ; ── Draw UI, start menu loop ──────────────────────────────────────
+    call ui_draw_main
+    mov  byte [sel], 0
+    call ui_draw_items
+
+.key_loop:
+    xor  ah, ah
+    int  0x16              ; AH=scancode
+
+    cmp  ah, 0x48          ; Up
+    je   .up
+    cmp  ah, 0x50          ; Down
+    je   .down
+    cmp  ah, 0x1C          ; Enter
+    je   .enter
+    jmp  .key_loop
+.up:
+    cmp  byte [sel], 0
+    je   .key_loop
+    dec  byte [sel]
+    call ui_draw_items
+    jmp  .key_loop
+.down:
+    cmp  byte [sel], 1
+    je   .key_loop
+    inc  byte [sel]
+    call ui_draw_items
+    jmp  .key_loop
+.enter:
+    cmp  byte [sel], 0
+    je   .do_boot
+    call ui_draw_confirm
+    mov  byte [conf_sel], 1  ; default = No
+    call ui_draw_yesno
+.ck:
+    xor  ah, ah
+    int  0x16
+    cmp  ah, 0x4B          ; Left
+    je   .cl
+    cmp  ah, 0x4D          ; Right
+    je   .cr
+    cmp  ah, 0x1C          ; Enter
+    je   .ce
+    cmp  ah, 0x01          ; Esc
+    je   .cc
+    jmp  .ck
+.cl:
+    cmp  byte [conf_sel], 0
+    je   .ck
+    dec  byte [conf_sel]
+    call ui_draw_yesno
+    jmp  .ck
+.cr:
+    cmp  byte [conf_sel], 1
+    je   .ck
+    inc  byte [conf_sel]
+    call ui_draw_yesno
+    jmp  .ck
+.ce:
+    cmp  byte [conf_sel], 0
+    jne  .cc
+    mov  byte [boot_flag], 0x01
+    jmp  load_kernel
+.cc:
+    call ui_draw_main
+    mov  byte [sel], 1
+    call ui_draw_items
+    jmp  .key_loop
+.do_boot:
+    mov  byte [boot_flag], 0x00
+    jmp  load_kernel
+
+; ════════════════════════════════════════════════════════════════════
+; Primitives
+; ════════════════════════════════════════════════════════════════════
+
+; vga_putc: AL=char AH=attr BH=row BL=col
+vga_putc:
+    push es
+    push di
+    push bx
+    push ax
+    mov  di, VGA_SEG
+    mov  es, di
+    VGA_OFFSET               ; DI = byte offset
+    pop  ax
+    mov  [es:di], al         ; char
+    mov  [es:di+1], ah       ; attr
+    pop  bx
+    pop  di
+    pop  es
+    ret
+
+; vga_puts: SI=str AH=attr BH=row BL=col  (BL advances per char)
+vga_puts:
+    push si
+    push ax
+    push bx
+.lp:
+    lodsb
+    test al, al
+    jz   .done
+    call vga_putc
+    inc  bl
+    jmp  .lp
+.done:
+    pop  bx
+    pop  ax
+    pop  si
+    ret
+
+; vga_fill_row: fill row BH from col BL for CX chars with AL=char AH=attr
+vga_fill_row:
+    push cx
+    push bx
+.lp:
+    call vga_putc
+    inc  bl
+    loop .lp
+    pop  bx
+    pop  cx
+    ret
+
+; ════════════════════════════════════════════════════════════════════
+; UI — Main menu
+; Layout (80x25):
+;   Row  0   : header bar  (full width, dark blue BG, cyan text)
+;   Row  1   : blank
+;   Row  2   : OS name large
+;   Row  3   : version / tagline
+;   Row  4   : blank
+;   Row  5   : ┌─ box top ─────────────────────────────────────────┐
+;   Row  6   : │  "Please select a boot option:"                   │
+;   Row  7   : │ ──────────────────────────────────────────────── │
+;   Row  8   : │  item 0                                           │
+;   Row  9   : │                                                   │
+;   Row 10   : │  item 1                                           │
+;   Row 11   : │ ──────────────────────────────────────────────── │
+;   Row 12   : └───────────────────────────────────────────────────┘
+;   Row 24   : footer hint bar
+; ════════════════════════════════════════════════════════════════════
+
+ui_draw_main:
+    push ax
+    push bx
+    push cx
+    push si
+
+    ; ── Fill whole screen dark blue ───────────────────────────────────
+    push es
+    push di
+    mov  ax, VGA_SEG
+    mov  es, ax
+    xor  di, di
+    mov  cx, 80*25
+    mov  ax, 0x1720
+    rep  stosw
+    pop  di
+    pop  es
+
+    ; ── Header row 0: full-width cyan on dark blue ────────────────────
+    mov  ah, 0x3F            ; bright white on cyan
+    mov  al, ' '
+    mov  bh, 0
+    mov  bl, 0
+    mov  cx, 80
+    call vga_fill_row
+    ; header text centred
+    mov  ah, 0x3E            ; yellow on cyan
+    mov  bh, 0
+    mov  bl, 31
+    mov  si, str_hdr
+    call vga_puts
+
+    ; ── OS title row 2 ───────────────────────────────────────────────
+    mov  ah, 0x1F
+    mov  bh, 2
+    mov  bl, 37
+    mov  si, str_os
+    call vga_puts
+
+    ; ── Tagline row 3 ────────────────────────────────────────────────
+    mov  ah, 0x1B            ; cyan on blue
+    mov  bh, 3
+    mov  bl, 31
+    mov  si, str_tag
+    call vga_puts
+
+    ; ── Box rows 5..12, cols 12..67 (width 56) ───────────────────────
+    ; top ┌─...─┐
+    mov  ah, 0x17
+    mov  al, 0xDA            ; ┌
+    mov  bh, 5
+    mov  bl, 12
+    call vga_putc
+    mov  al, 0xC4            ; ─
+    mov  bl, 13
+    mov  cx, 54
+    call vga_fill_row
+    mov  al, 0xBF            ; ┐
+    mov  bl, 67
+    call vga_putc
+
+    ; sides rows 6..11
+    mov  bh, 6
+.sides:
+    mov  ah, 0x17
+    mov  al, 0xB3            ; │
+    mov  bl, 12
+    call vga_putc
+    mov  al, ' '
+    mov  bl, 13
+    mov  cx, 54
+    call vga_fill_row
+    mov  al, 0xB3
+    mov  bl, 67
+    call vga_putc
+    inc  bh
+    cmp  bh, 12
+    jb   .sides
+
+    ; bottom └─...─┘
+    mov  ah, 0x17
+    mov  al, 0xC0            ; └
+    mov  bh, 12
+    mov  bl, 12
+    call vga_putc
+    mov  al, 0xC4
+    mov  bl, 13
+    mov  cx, 54
+    call vga_fill_row
+    mov  al, 0xD9            ; ┘
+    mov  bl, 67
+    call vga_putc
+
+    ; prompt row 6
+    mov  ah, 0x1B
+    mov  bh, 6
+    mov  bl, 14
+    mov  si, str_prompt
+    call vga_puts
+
+    ; divider row 7
+    mov  ah, 0x18
+    mov  al, 0xC4
+    mov  bh, 7
+    mov  bl, 13
+    mov  cx, 54
+    call vga_fill_row
+
+    ; divider row 11
+    mov  ah, 0x18
+    mov  al, 0xC4
+    mov  bh, 11
+    mov  bl, 13
+    mov  cx, 54
+    call vga_fill_row
+
+    ; ── Footer row 24 ────────────────────────────────────────────────
+    mov  ah, 0x70            ; black on light grey
+    mov  al, ' '
+    mov  bh, 24
+    mov  bl, 0
+    mov  cx, 80
+    call vga_fill_row
+    mov  ah, 0x70
+    mov  bh, 24
+    mov  bl, 20
+    mov  si, str_footer
+    call vga_puts
+
+    pop  si
+    pop  cx
+    pop  bx
+    pop  ax
+    ret
+
+; ui_draw_items: redraw the two selectable rows using [sel]
+ui_draw_items:
+    push ax
+    push bx
+    push cx
+    push si
+
+    ; ── Item 0 row 8 ─────────────────────────────────────────────────
+    cmp  byte [sel], 0
+    je   .i0hi
+    mov  ah, 0x17            ; normal: white on blue
+    jmp  .i0draw
+.i0hi:
+    mov  ah, 0x70            ; selected: black on light grey
+.i0draw:
+    mov  al, ' '
+    mov  bh, 8
+    mov  bl, 13
+    mov  cx, 54
+    call vga_fill_row
+    ; arrow indicator
+    cmp  byte [sel], 0
+    jne  .i0text
+    mov  ah, 0x70
+    mov  al, 0x10            ; ► (filled right arrow)
+    mov  bh, 8
+    mov  bl, 14
+    call vga_putc
+.i0text:
+    mov  ah, 0x70
+    cmp  byte [sel], 0
+    je   .i0put
+    mov  ah, 0x1F
+.i0put:
+    mov  bh, 8
+    mov  bl, 16
+    mov  si, str_opt0
+    call vga_puts
+
+    ; ── Item 1 row 10 ────────────────────────────────────────────────
+    cmp  byte [sel], 1
+    je   .i1hi
+    mov  ah, 0x17
+    jmp  .i1draw
+.i1hi:
+    mov  ah, 0x70
+.i1draw:
+    mov  al, ' '
+    mov  bh, 10
+    mov  bl, 13
+    mov  cx, 54
+    call vga_fill_row
+    cmp  byte [sel], 1
+    jne  .i1text
+    mov  ah, 0x70
+    mov  al, 0x10
+    mov  bh, 10
+    mov  bl, 14
+    call vga_putc
+.i1text:
+    mov  ah, 0x70
+    cmp  byte [sel], 1
+    je   .i1put
+    mov  ah, 0x1F
+.i1put:
+    mov  bh, 10
+    mov  bl, 16
+    mov  si, str_opt1
+    call vga_puts
+
+    pop  si
+    pop  cx
+    pop  bx
+    pop  ax
+    ret
+
+; ════════════════════════════════════════════════════════════════════
+; UI — Confirm reinstall screen
+; ════════════════════════════════════════════════════════════════════
+ui_draw_confirm:
+    push ax
+    push bx
+    push cx
+    push si
+
+    ; Refill screen
+    push es
+    push di
+    mov  ax, VGA_SEG
+    mov  es, ax
+    xor  di, di
+    mov  cx, 80*25
+    mov  ax, 0x1720
+    rep  stosw
+    pop  di
+    pop  es
+
+    ; ── Red warning header row 0 ─────────────────────────────────────
+    mov  ah, 0x4F
+    mov  al, ' '
+    mov  bh, 0
+    mov  bl, 0
+    mov  cx, 80
+    call vga_fill_row
+    mov  ah, 0x4E
+    mov  bh, 0
+    mov  bl, 28
+    mov  si, str_warn_hdr
+    call vga_puts
+
+    ; ── Warning icon + text rows 4,5,6 ───────────────────────────────
+    mov  ah, 0x1E            ; yellow on blue
+    mov  bh, 4
+    mov  bl, 20
+    mov  si, str_warn1
+    call vga_puts
+    mov  ah, 0x1F
+    mov  bh, 5
+    mov  bl, 20
+    mov  si, str_warn2
+    call vga_puts
+    mov  ah, 0x1F
+    mov  bh, 6
+    mov  bl, 20
+    mov  si, str_warn3
+    call vga_puts
+
+    ; ── Question row 9 ───────────────────────────────────────────────
+    mov  ah, 0x1F
+    mov  bh, 9
+    mov  bl, 22
+    mov  si, str_question
+    call vga_puts
+
+    ; ── Footer row 24 ────────────────────────────────────────────────
+    mov  ah, 0x70
+    mov  al, ' '
+    mov  bh, 24
+    mov  bl, 0
+    mov  cx, 80
+    call vga_fill_row
+    mov  ah, 0x70
+    mov  bh, 24
+    mov  bl, 8
+    mov  si, str_cfooter
+    call vga_puts
+
+    pop  si
+    pop  cx
+    pop  bx
+    pop  ax
+    ret
+
+; ui_draw_yesno: draw Yes/No buttons at row 12, conf_sel=0→Yes
+ui_draw_yesno:
+    push ax
+    push bx
+    push si
+
+    ; clear button row 12
+    mov  ah, 0x17
+    mov  al, ' '
+    mov  bh, 12
+    mov  bl, 0
+    mov  cx, 80
+    call vga_fill_row
+
+    ; Yes button col 24
+    cmp  byte [conf_sel], 0
+    je   .yhi
+    mov  ah, 0x1A            ; green on blue (normal)
+    jmp  .ydr
+.yhi:
+    mov  ah, 0x2F            ; bright white on green (selected)
+.ydr:
+    mov  bh, 12
+    mov  bl, 24
+    mov  si, str_yes
+    call vga_puts
+
+    ; No button col 40
+    cmp  byte [conf_sel], 1
+    je   .nhi
+    mov  ah, 0x1F            ; normal
+    jmp  .ndr
+.nhi:
+    mov  ah, 0x4F            ; white on red (selected)
+.ndr:
+    mov  bh, 12
+    mov  bl, 42
+    mov  si, str_no
+    call vga_puts
+
+    pop  si
+    pop  bx
+    pop  ax
+    ret
+
+; ════════════════════════════════════════════════════════════════════
+; Kernel loader
+; ════════════════════════════════════════════════════════════════════
+load_kernel:
+    ; loading screen
+    push es
+    push di
+    mov  ax, VGA_SEG
+    mov  es, ax
+    xor  di, di
+    mov  cx, 80*25
+    mov  ax, 0x1720
+    rep  stosw
+    pop  di
+    pop  es
+    mov  ah, 0x1F
+    mov  bh, 12
+    mov  bl, 31
+    mov  si, msg_loading
+    call vga_puts
+
+    mov  dword [lba_cur],   5
+    mov  dword [dest],      0x100000
+    mov  word  [remaining], KERNEL_SECS
 
 .batch:
-    cmp word [remaining], 0
-    je  .done_read
-
-    ; sectors this batch: min(remaining, 32)
-    mov ax, [remaining]
-    cmp ax, 32
-    jbe .got_batch
-    mov ax, 32
+    cmp  word [remaining], 0
+    je   .done_read
+    mov  ax, [remaining]
+    cmp  ax, 32
+    jbe  .got_batch
+    mov  ax, 32
 .got_batch:
-    mov [batch], ax
+    mov  [batch], ax
 
-    ; ── LBA → CHS ───────────────────────────────────────────────────
-    ; Using 63 spt / 255 heads (standard BIOS geometry for raw HDD)
-    mov eax, [lba_cur]
-    xor edx, edx
-    mov ecx, 63
-    div ecx                 ; eax = LBA/63, edx = sector-1 (0-based)
-    mov byte [s], dl        ; S = (LBA % 63) + 1 — add 1 below
-    inc byte [s]
+    mov  eax, [lba_cur]
+    xor  edx, edx
+    mov  ecx, 63
+    div  ecx
+    mov  byte [s], dl
+    inc  byte [s]
+    xor  edx, edx
+    mov  ecx, 255
+    div  ecx
+    mov  [h], dl
+    mov  [c], ax
 
-    xor edx, edx
-    mov ecx, 255
-    div ecx                 ; eax = cylinder, edx = head
-    mov [h], dl
-    mov [c], ax             ; cylinder (fits in 10 bits for BIOS)
-
-    ; ── INT 13h read to bounce buffer at 0x0900:0x0000 = linear 0x9000
-    ; Use segment:offset form so ES:BX = 0x0900:0x0000
     push es
     mov  ax, 0x0900
     mov  es, ax
     xor  bx, bx
-
     mov  ah, 0x02
     mov  al, [batch]
-    mov  ch, [c]             ; cylinder low 8 bits
-    mov  cl, [s]             ; sector (bits 0-5)
-    ; merge cylinder high 2 bits into CL bits 6-7
+    mov  ch, [c]
+    mov  cl, [s]
     mov  bl, byte [c+1]
     and  bl, 0x03
     shl  bl, 6
     or   cl, bl
-    xor  bx, bx              ; ES:BX = 0x0900:0x0000
-
+    xor  bx, bx
     mov  dh, [h]
     mov  dl, [boot_drive]
     int  0x13
-    pop  es                  ; restore ES (unreal mode data selector)
+    pop  es
     jc   .disk_err
 
-    ; ── Copy bounce buffer (linear 0x9000) → dest using FS ──────────
     movzx ecx, word [batch]
-    shl   ecx, 9             ; * 512 = byte count
-    mov   esi, 0x9000        ; source linear address
-    mov   edi, [dest]        ; 32-bit destination (above 1 MB)
-
+    shl   ecx, 9
+    mov   esi, 0x9000
+    mov   edi, [dest]
 .copy:
     mov   al, [esi]
-    a32   mov [fs:edi], al   ; FS has 4 GB limit from unreal mode
+    a32   mov [fs:edi], al
     inc   esi
     inc   edi
     dec   ecx
     jnz   .copy
 
-    ; ── Advance counters ────────────────────────────────────────────
     movzx eax, word [batch]
-    add   [lba_cur], eax     ; advance LBA
+    add   [lba_cur], eax
     shl   eax, 9
-    add   [dest], eax        ; advance destination pointer
+    add   [dest], eax
     mov   ax, [batch]
-    sub   [remaining], ax    ; subtract sectors loaded
+    sub   [remaining], ax
     jmp   .batch
 
 .done_read:
-    mov si, msg_jump
-    call print16
-
-    ; ── Enter 32-bit protected mode ─────────────────────────────────
+    movzx eax, byte [boot_flag]
+    a32   mov [fs:0x7000], al
     cli
     lgdt [gdt_ptr]
-
-    mov eax, cr0
-    or  al, 1
-    mov cr0, eax
-
-    jmp 0x08:pmode32        ; far jump flushes CS
+    mov  eax, cr0
+    or   al, 1
+    mov  cr0, eax
+    jmp  0x08:pmode32
 
 .disk_err:
-    mov si, msg_err
-    call print16
+    mov  ah, 0x4F
+    mov  bh, 14
+    mov  bl, 29
+    mov  si, msg_disk_err
+    call vga_puts
 .halt:
     cli
     hlt
-    jmp .halt
+    jmp  .halt
 
-; ── Real-mode print (SI = null-terminated string) ───────────────────
-print16:
-    push ax
-    push bx
-    mov  ah, 0x0E
-    xor  bx, bx
-.lp:
-    lodsb
-    test al, al
-    jz   .done
-    int  0x10
-    jmp  .lp
-.done:
-    pop bx
-    pop ax
-    ret
+; ════════════════════════════════════════════════════════════════════
+; Data
+; ════════════════════════════════════════════════════════════════════
+boot_drive:  db 0
+boot_flag:   db 0
+sel:         db 0
+conf_sel:    db 1
+lba_cur:     dd 5
+dest:        dd 0x100000
+remaining:   dw KERNEL_SECS
+batch:       dw 0
+c:           dw 0
+h:           db 0
+s:           db 0
 
-; ── Data ────────────────────────────────────────────────────────────
-boot_drive: db 0
-lba_cur:    dd 5
-dest:       dd 0x100000
-remaining:  dw KERNEL_SECS
-batch:      dw 0
-c:          dw 0
-h:          db 0
-s:          db 0
+KERNEL_SECS  equ 256
 
-KERNEL_SECS equ 256         ; 256 * 512 = 128 KB max kernel
+str_hdr:      db "AO OS  Bootloader", 0
+str_os:       db "AO  OS", 0
+str_tag:      db "v1.4.1  -  Aurora", 0
+str_prompt:   db "Please select a boot option:", 0
+str_opt0:     db "Boot AO OS normally", 0
+str_opt1:     db "Reinstall  /  Format disk", 0
+str_footer:   db "[ Up/Down ] Navigate    [ Enter ] Select", 0
+str_warn_hdr: db "! WARNING !", 0
+str_warn1:    db "All data on the primary disk will be ERASED.", 0
+str_warn2:    db "The filesystem will be completely reformatted.", 0
+str_warn3:    db "This action CANNOT be undone.", 0
+str_question: db "Are you sure you want to reinstall?", 0
+str_yes:      db "  YES - Reinstall  ", 0
+str_no:       db "  NO  - Go Back  ", 0
+str_cfooter:  db "[ Left/Right ] Navigate    [ Enter ] Confirm    [ Esc ] Cancel", 0
+msg_loading:  db "Loading kernel...", 0
+msg_disk_err: db "DISK READ ERROR!", 0
 
-msg_stage2: db "Stage2 OK", 0x0D, 0x0A, 0
-msg_jump:   db "Jumping to kernel...", 0x0D, 0x0A, 0
-msg_err:    db "Disk error!", 0x0D, 0x0A, 0
-
-; ── GDT ─────────────────────────────────────────────────────────────
+; ════════════════════════════════════════════════════════════════════
+; GDT
+; ════════════════════════════════════════════════════════════════════
 align 8
 gdt:
-.null:  dq 0x0000000000000000
-.code:  dq 0x00CF9A000000FFFF   ; 32-bit code, base=0, limit=4G
-.data:  dq 0x00CF92000000FFFF   ; 32-bit data, base=0, limit=4G
+.null: dq 0x0000000000000000
+.code: dq 0x00CF9A000000FFFF
+.data: dq 0x00CF92000000FFFF
 gdt_end:
 
 gdt_ptr:
     dw gdt_end - gdt - 1
     dd gdt
 
-; ── 32-bit protected mode entry ─────────────────────────────────────
 [BITS 32]
 pmode32:
-    mov ax, 0x10
-    mov ds, ax
-    mov es, ax
-    mov fs, ax
-    mov gs, ax
-    mov ss, ax
-    mov esp, 0x00200000     ; stack below 2 MB
+    mov  ax, 0x10
+    mov  ds, ax
+    mov  es, ax
+    mov  fs, ax
+    mov  gs, ax
+    mov  ss, ax
+    mov  esp, 0x00200000
+    jmp  0x08:0x100000
 
-    jmp 0x08:0x100000       ; jump to kernel at 1 MB
-
-; Pad to exactly 4 sectors (2048 bytes)
 times 2048 - ($ - $$) db 0
