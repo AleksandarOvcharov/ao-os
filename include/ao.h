@@ -118,6 +118,21 @@ static inline int ao_close(int fd) {
     return syscall(SYS_CLOSE, (uint32_t)fd, 0, 0);
 }
 
+// argc/argv - written by shell before execution at 0x00091000
+// Layout: [uint32_t argc][uint32_t argv[0]..argv[15]][strings...]
+#define AO_ARGV_BASE 0x00091000
+#define AO_ARGV_MAX  16
+
+static inline int ao_argc(void) {
+    return (int)(*(volatile uint32_t*)AO_ARGV_BASE);
+}
+
+static inline const char* ao_argv(int i) {
+    if (i < 0 || i >= ao_argc()) return (const char*)0;
+    volatile uint32_t* base = (volatile uint32_t*)AO_ARGV_BASE;
+    return (const char*)base[1 + i];
+}
+
 // String length
 static inline size_t ao_strlen(const char* str) {
     size_t len = 0;

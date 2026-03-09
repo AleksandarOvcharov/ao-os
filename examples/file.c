@@ -6,19 +6,19 @@ void _start(void) {
     ao_println("  Hello from C Program!");
     ao_println("=================================");
 
-    ao_setcolor(COLOR_LIGHT_GREEN, COLOR_BLACK);
-    ao_println("This program was written in C");
-
+    // Print arguments
+    int argc = ao_argc();
     ao_setcolor(COLOR_YELLOW, COLOR_BLACK);
-    ao_print("Enter your name: ");
+    ao_print("Arguments: ");
+    ao_putchar('0' + argc);
+    ao_putchar('\n');
 
-    char name[64];
-    ao_readline(name, sizeof(name));
-
-    ao_setcolor(COLOR_WHITE, COLOR_BLACK);
-    ao_print("Hello, ");
-    ao_print(name);
-    ao_println("!");
+    for (int i = 0; i < argc; i++) {
+        ao_print("  argv[");
+        ao_putchar('0' + i);
+        ao_print("] = ");
+        ao_println(ao_argv(i));
+    }
 
     ao_setcolor(COLOR_LIGHT_GREY, COLOR_BLACK);
     ao_println("Press any key to exit...");

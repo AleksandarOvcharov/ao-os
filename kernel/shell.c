@@ -81,6 +81,37 @@ static void shell_load_from_history(int index) {
     terminal_writestring(command_buffer);
 }
 
+// Write argc/argv to fixed address 0x00091000 for user programs
+// Layout: [uint32_t argc][uint32_t argv[0]..argv[N-1]][strings...]
+#define ARGV_BASE 0x00091000
+#define ARGV_MAX  16
+
+static void shell_setup_args(const char* full_cmd) {
+    volatile uint32_t* base = (volatile uint32_t*)ARGV_BASE;
+    // String storage starts after argc + ARGV_MAX pointers
+    char* strbuf = (char*)(ARGV_BASE + 4 + ARGV_MAX * 4);
+    int strbuf_pos = 0;
+    int argc = 0;
+
+    const char* p = full_cmd;
+    while (*p && argc < ARGV_MAX) {
+        // Skip spaces
+        while (*p == ' ') p++;
+        if (!*p) break;
+        // Find end of token
+        const char* tok_start = p;
+        while (*p && *p != ' ') p++;
+        int tok_len = (int)(p - tok_start);
+        // Write pointer into argv slot
+        base[1 + argc] = (uint32_t)(ARGV_BASE + 4 + ARGV_MAX * 4 + strbuf_pos);
+        // Copy string
+        for (int i = 0; i < tok_len; i++) strbuf[strbuf_pos++] = tok_start[i];
+        strbuf[strbuf_pos++] = '\0';
+        argc++;
+    }
+    base[0] = (uint32_t)argc;
+}
+
 void shell_execute_command(const char* cmd) {
     if (strlen(cmd) == 0) {
         return;
@@ -154,6 +185,7 @@ void shell_execute_command(const char* cmd) {
             filename[cmd_len] = '\0';
             
             if (aob_load(filename, &ctx) == 0) {
+                shell_setup_args(cmd);
                 aob_execute(&ctx);
                 aob_unload(&ctx);
             } else {
@@ -179,17 +211,8 @@ void shell_execute_command(const char* cmd) {
                     // resolve correctly (compiled with -Ttext=0x200000)
                     char* exec_addr = (char*)0x00200000;
                     memcpy(exec_addr, bin_buffer, file_size);
-                    // Write kernel API pointers to fixed address 0x00090000
-                    typedef void (*putchar_fn)(char);
-                    typedef void (*writestring_fn)(const char*);
-                    typedef void (*setcolor_fn)(uint8_t);
-                    typedef void (*clear_fn)(void);
-                    volatile unsigned int* api = (volatile unsigned int*)0x00090000;
-                    api[0] = 0x414F4150; // magic
-                    api[1] = (unsigned int)(putchar_fn)terminal_putchar;
-                    api[2] = (unsigned int)(writestring_fn)terminal_writestring;
-                    api[3] = (unsigned int)(setcolor_fn)terminal_setcolor;
-                    api[4] = (unsigned int)(clear_fn)terminal_clear;
+                    // Write argc/argv to 0x00091000
+                    shell_setup_args(cmd);
                     void (*entry_func)(void) = (void (*)(void))exec_addr;
                     entry_func();
                 } else {
