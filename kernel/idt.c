@@ -15,6 +15,9 @@ void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
     idt[num].flags = flags;
 }
 
+extern void irq0_handler(void);
+extern void syscall_handler(void);
+
 static void pic_remap(void) {
     outb(0x20, 0x11);
     outb(0xA0, 0x11);
@@ -36,7 +39,8 @@ void idt_init(void) {
     
     pic_remap();
     
-    idt_set_gate(32, (uint32_t)irq0_handler, 0x08, 0x8E);
+    idt_set_gate(32,   (uint32_t)irq0_handler,   0x08, 0x8E);
+    idt_set_gate(0x80, (uint32_t)syscall_handler, 0x08, 0xEE); // 0xEE = present, DPL=3, 32-bit interrupt gate
     
     idt_load((uint32_t)&idt_ptr);
 }

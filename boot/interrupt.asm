@@ -21,6 +21,30 @@ irq0_handler:
     popa
     iret
 
+; Syscall handler (int 0x80)
+; eax = syscall number
+; ebx = arg1, ecx = arg2, edx = arg3
+; return value in eax
+global syscall_handler
+extern syscall_dispatch
+syscall_handler:
+    pusha
+    
+    ; Push args: edx, ecx, ebx, eax (order for C: eax, ebx, ecx, edx)
+    push edx
+    push ecx
+    push ebx
+    push eax
+    call syscall_dispatch
+    add esp, 16
+    
+    ; Store return value: overwrite eax slot in pusha frame
+    ; pusha frame (from ESP): edi,esi,ebp,esp_dummy,ebx,edx,ecx,eax
+    mov [esp + 28], eax
+    
+    popa
+    iret
+
 ; Load IDT
 idt_load:
     mov eax, [esp + 4]

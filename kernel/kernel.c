@@ -8,6 +8,7 @@
 #include "serial.h"
 #include "ata.h"
 #include "fs.h"
+#include "syscall.h"
 
 void kernel_main(void) {
     terminal_initialize();
@@ -17,6 +18,7 @@ void kernel_main(void) {
     
     klog_info("Initializing IDT...");
     idt_init();
+    syscall_init();
     
     klog_info("Initializing PIT timer...");
     timer_init(TIMER_HZ);
