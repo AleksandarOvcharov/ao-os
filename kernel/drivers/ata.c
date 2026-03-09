@@ -3,6 +3,7 @@
 #include "klog.h"
 
 static int ata_available = 0;
+static uint8_t ata_drive_select = 0xE0; /* 0xE0=master, 0xF0=slave */
 
 void ata_wait_bsy(void) {
     while (inb(ATA_REG_STATUS) & ATA_STATUS_BSY);
@@ -34,10 +35,14 @@ int ata_is_available(void) {
     return ata_available;
 }
 
+void ata_select_drive(int slave) {
+    ata_drive_select = slave ? 0xF0 : 0xE0;
+}
+
 int ata_read_sector(uint32_t lba, uint8_t* buffer) {
     ata_wait_bsy();
     
-    outb(ATA_REG_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
+    outb(ATA_REG_DRIVE, ata_drive_select | ((lba >> 24) & 0x0F));
     outb(ATA_REG_SECCOUNT, 1);
     outb(ATA_REG_LBA_LOW, (uint8_t)lba);
     outb(ATA_REG_LBA_MID, (uint8_t)(lba >> 8));
@@ -66,7 +71,7 @@ int ata_read_sector(uint32_t lba, uint8_t* buffer) {
 int ata_write_sector(uint32_t lba, uint8_t* buffer) {
     ata_wait_bsy();
     
-    outb(ATA_REG_DRIVE, 0xE0 | ((lba >> 24) & 0x0F));
+    outb(ATA_REG_DRIVE, ata_drive_select | ((lba >> 24) & 0x0F));
     outb(ATA_REG_SECCOUNT, 1);
     outb(ATA_REG_LBA_LOW, (uint8_t)lba);
     outb(ATA_REG_LBA_MID, (uint8_t)(lba >> 8));

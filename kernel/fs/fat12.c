@@ -294,9 +294,20 @@ void fat12_init(void) {
     memcpy(&bpb, boot_sector, sizeof(fat12_bpb_t));
     
     if (bpb.bytes_per_sector != 512) {
-        klog_warn("Non-standard sector size, using ramfs");
-        fat12_initialized = 0;
-        return;
+        // Master drive has no valid FAT12 BPB — try slave (floppy.img on ide1)
+        ata_select_drive(1);
+        if (ata_read_sector(0, boot_sector) != 0) {
+            klog_warn("Slave drive read failed, using ramfs");
+            fat12_initialized = 0;
+            return;
+        }
+        memcpy(&bpb, boot_sector, sizeof(fat12_bpb_t));
+        if (bpb.bytes_per_sector != 512) {
+            klog_warn("No FAT12 volume found, using ramfs");
+            fat12_initialized = 0;
+            return;
+        }
+        klog_info("FAT12 found on slave drive");
     }
     
     uint32_t fat_start = bpb.reserved_sectors;

@@ -4,58 +4,73 @@ AS = nasm
 CC = i686-elf-gcc
 LD = i686-elf-gcc
 
-ASFLAGS = -f elf32
-CFLAGS = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Iinclude
+ASFLAGS_ELF = -f elf32
+ASFLAGS_BIN = -f bin
+CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Iinclude
 LDFLAGS = -T linker.ld -ffreestanding -O2 -nostdlib -lgcc
 
-BUILD_DIR = build
-ISO_DIR = iso
-BOOT_DIR = boot
-KERNEL_DIR = kernel
+BUILD_DIR      = build
+BOOT_DIR       = boot
+BOOTLOADER_DIR = bootloader
+KERNEL_DIR     = kernel
 
-BOOT_OBJ = $(BUILD_DIR)/boot.o $(BUILD_DIR)/interrupt.o
-KERNEL_OBJS = $(BUILD_DIR)/kernel.o \
-              $(BUILD_DIR)/vga.o \
-              $(BUILD_DIR)/keyboard.o \
-              $(BUILD_DIR)/string.o \
-              $(BUILD_DIR)/shell.o \
-              $(BUILD_DIR)/commands.o \
-              $(BUILD_DIR)/system.o \
-              $(BUILD_DIR)/version.o \
-              $(BUILD_DIR)/panic.o \
-              $(BUILD_DIR)/memory.o \
-              $(BUILD_DIR)/idt.o \
-              $(BUILD_DIR)/timer.o \
-              $(BUILD_DIR)/cpu.o \
-              $(BUILD_DIR)/klog.o \
-              $(BUILD_DIR)/serial.o \
-              $(BUILD_DIR)/ata.o \
-              $(BUILD_DIR)/ramfs.o \
-              $(BUILD_DIR)/fat12.o \
-              $(BUILD_DIR)/fs.o \
-              $(BUILD_DIR)/editor.o \
-              $(BUILD_DIR)/installer.o \
-              $(BUILD_DIR)/aob.o \
-              $(BUILD_DIR)/syscall.o
-
-KERNEL_BIN = $(BUILD_DIR)/ao-os.bin
+# Output — raw bootable disk image named .iso for familiarity
 ISO_FILE = ao-os.iso
 
-.PHONY: all clean run run-disk floppy iso
+BOOT_OBJ = $(BUILD_DIR)/boot.o $(BUILD_DIR)/interrupt.o
+KERNEL_OBJS = \
+    $(BUILD_DIR)/kernel.o \
+    $(BUILD_DIR)/vga.o \
+    $(BUILD_DIR)/keyboard.o \
+    $(BUILD_DIR)/string.o \
+    $(BUILD_DIR)/shell.o \
+    $(BUILD_DIR)/commands.o \
+    $(BUILD_DIR)/system.o \
+    $(BUILD_DIR)/version.o \
+    $(BUILD_DIR)/panic.o \
+    $(BUILD_DIR)/memory.o \
+    $(BUILD_DIR)/idt.o \
+    $(BUILD_DIR)/timer.o \
+    $(BUILD_DIR)/cpu.o \
+    $(BUILD_DIR)/klog.o \
+    $(BUILD_DIR)/serial.o \
+    $(BUILD_DIR)/ata.o \
+    $(BUILD_DIR)/ramfs.o \
+    $(BUILD_DIR)/fat12.o \
+    $(BUILD_DIR)/fs.o \
+    $(BUILD_DIR)/editor.o \
+    $(BUILD_DIR)/installer.o \
+    $(BUILD_DIR)/aob.o \
+    $(BUILD_DIR)/syscall.o
 
-all: $(ISO_FILE)
+KERNEL_ELF  = $(BUILD_DIR)/ao-os.elf
+KERNEL_BIN  = $(BUILD_DIR)/ao-os.bin
+STAGE1_BIN  = $(BUILD_DIR)/stage1.bin
+STAGE2_BIN  = $(BUILD_DIR)/stage2.bin
+DISK_IMG    = $(BUILD_DIR)/ao-os.img
+
+.PHONY: all clean run run-disk iso
+
+all: iso
 
 $(BUILD_DIR):
 	mkdir -p $(BUILD_DIR)
 
-$(ISO_DIR):
-	mkdir -p $(ISO_DIR)/boot/grub
+# ── Bootloader ─────────────────────────────────────────────────────────────
+
+$(STAGE1_BIN): $(BOOTLOADER_DIR)/stage1.asm | $(BUILD_DIR)
+	$(AS) $(ASFLAGS_BIN) $< -o $@
+
+$(STAGE2_BIN): $(BOOTLOADER_DIR)/stage2.asm | $(BUILD_DIR)
+	$(AS) $(ASFLAGS_BIN) $< -o $@
+
+# ── Kernel ELF objects ─────────────────────────────────────────────────────
 
 $(BUILD_DIR)/boot.o: $(BOOT_DIR)/boot.asm | $(BUILD_DIR)
-	$(AS) $(ASFLAGS) $< -o $@
+	$(AS) $(ASFLAGS_ELF) $< -o $@
 
 $(BUILD_DIR)/interrupt.o: $(BOOT_DIR)/interrupt.asm | $(BUILD_DIR)
-	$(AS) $(ASFLAGS) $< -o $@
+	$(AS) $(ASFLAGS_ELF) $< -o $@
 
 $(BUILD_DIR)/kernel.o: $(KERNEL_DIR)/kernel.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -126,37 +141,49 @@ $(BUILD_DIR)/aob.o: $(KERNEL_DIR)/aob/aob.c | $(BUILD_DIR)
 $(BUILD_DIR)/syscall.o: $(KERNEL_DIR)/syscall.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(KERNEL_BIN): $(BOOT_OBJ) $(KERNEL_OBJS)
+# ── Link kernel binary ──────────────────────────────────────────────────────
+
+$(KERNEL_ELF): $(BOOT_OBJ) $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
-$(ISO_FILE): $(KERNEL_BIN) | $(ISO_DIR)
-	cp $(KERNEL_BIN) $(ISO_DIR)/boot/ao-os.bin
-	echo 'set timeout=0' > $(ISO_DIR)/boot/grub/grub.cfg
-	echo 'set default=0' >> $(ISO_DIR)/boot/grub/grub.cfg
-	echo '' >> $(ISO_DIR)/boot/grub/grub.cfg
-	echo 'menuentry "AO OS" {' >> $(ISO_DIR)/boot/grub/grub.cfg
-	echo '    multiboot /boot/ao-os.bin' >> $(ISO_DIR)/boot/grub/grub.cfg
-	echo '    boot' >> $(ISO_DIR)/boot/grub/grub.cfg
-	echo '}' >> $(ISO_DIR)/boot/grub/grub.cfg
-	grub-mkrescue -o $(ISO_FILE) $(ISO_DIR) 2>&1 | grep -v "xorriso"
+$(KERNEL_BIN): $(KERNEL_ELF)
+	i686-elf-objcopy -O binary $< $@
+
+# ── Assemble disk image ────────────────────────────────────────────────────
+# Layout:
+#   sector 0        : stage1 (MBR)
+#   sectors 1-4     : stage2
+#   sectors 5+      : kernel flat binary
+
+$(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) | $(BUILD_DIR)
+	@KSECS=$$(( ($$(wc -c < $(KERNEL_BIN)) + 511) / 512 )); \
+	 echo "Kernel: $$KSECS sectors ($$(wc -c < $(KERNEL_BIN)) bytes)"
+	dd if=/dev/zero of=$@ bs=512 count=2880 2>/dev/null
+	dd if=$(STAGE1_BIN) of=$@ bs=512 seek=0 conv=notrunc 2>/dev/null
+	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
+	dd if=$(KERNEL_BIN) of=$@ bs=512 seek=5 conv=notrunc 2>/dev/null
+
+# ── Copy disk image to .iso (raw bootable image, .iso extension) ────────────
+$(ISO_FILE): $(DISK_IMG)
+	cp $< $@
+	@echo "ISO built: $@"
 
 iso: $(ISO_FILE)
 
-run: $(KERNEL_BIN)
-	qemu-system-i386 -kernel $(KERNEL_BIN) -serial stdio
+# ── Run targets ────────────────────────────────────────────────────────────
 
-run-iso: $(ISO_FILE)
-	qemu-system-i386 -cdrom $(ISO_FILE) -serial stdio
+run: iso
+	qemu-system-i386 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
+	                 -serial stdio -m 32
 
-run-disk: $(KERNEL_BIN)
+run-disk: iso
 	@if [ ! -f floppy.img ]; then \
 		echo "Creating floppy.img..."; \
 		bash create_floppy.sh; \
 	fi
-	qemu-system-i386 -kernel $(KERNEL_BIN) -drive file=floppy.img,format=raw,if=ide -serial stdio
-
-floppy:
-	bash create_floppy.sh
+	qemu-system-i386 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
+	                 -drive file=floppy.img,format=raw,if=ide \
+	                 -serial stdio -m 32
 
 clean:
-	rm -rf $(BUILD_DIR) $(ISO_DIR) $(ISO_FILE)
+	rm -rf $(BUILD_DIR) $(ISO_FILE)

@@ -1,17 +1,8 @@
-; AO OS Bootloader
-; This is a multiboot-compliant bootloader for GRUB
+; AO OS Kernel Entry Point
+; Entered from the custom bootloader in 32-bit protected mode.
+; ESP is already set by stage2; we just call kernel_main.
 
-MBALIGN  equ  1 << 0
-MEMINFO  equ  1 << 1
-FLAGS    equ  MBALIGN | MEMINFO
-MAGIC    equ  0x1BADB002
-CHECKSUM equ -(MAGIC + FLAGS)
-
-section .multiboot
-align 4
-    dd MAGIC
-    dd FLAGS
-    dd CHECKSUM
+[BITS 32]
 
 section .bss
 align 16
@@ -20,7 +11,7 @@ stack_bottom:
 stack_top:
 
 section .text
-global _start:function (_start.end - _start)
+global _start
 _start:
     mov esp, stack_top
 
@@ -31,4 +22,3 @@ _start:
 .hang:
     hlt
     jmp .hang
-.end:

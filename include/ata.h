@@ -29,6 +29,7 @@
 void ata_init(void);
 void ata_wait_bsy(void);
 void ata_wait_drq(void);
+void ata_select_drive(int slave);
 int ata_read_sector(uint32_t lba, uint8_t* buffer);
 int ata_write_sector(uint32_t lba, uint8_t* buffer);
 int ata_is_available(void);
