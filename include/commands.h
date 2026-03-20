@@ -32,5 +32,13 @@ void cmd_mv(const char* args);
 void cmd_rename(const char* args);
 void cmd_which(const char* args);
 void cmd_tree(void);
+void cmd_date(void);
+void cmd_hexdump(const char* args);
+void cmd_wc(const char* args);
+void cmd_head(const char* args);
+void cmd_sleep(const char* args);
+void cmd_history(void);
+void cmd_neofetch(void);
+void cmd_calc(const char* args);
 
 #endif

@@ -14,6 +14,7 @@
 #include "installer.h"
 #include "keyboard.h"
 #include "aob.h"
+#include "rtc.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -47,8 +48,16 @@ void cmd_help(void) {
     terminal_writestring("  rename   - Rename file (usage: rename <old> <new>)\n");
     terminal_writestring("  which    - Find command or file (usage: which <name>)\n");
     terminal_writestring("  tree     - Show directory tree\n");
+    terminal_writestring("  hexdump  - Hex dump of file (usage: hexdump <filename>)\n");
+    terminal_writestring("  wc       - Word/line/char count (usage: wc <filename>)\n");
+    terminal_writestring("  head     - Show first N lines (usage: head <filename> [N])\n");
     terminal_writestring("  mem      - Display memory usage information\n");
     terminal_writestring("  uptime   - Display system uptime\n");
+    terminal_writestring("  date     - Display current date and time\n");
+    terminal_writestring("  sleep    - Wait N seconds (usage: sleep <seconds>)\n");
+    terminal_writestring("  history  - Show command history\n");
+    terminal_writestring("  neofetch - Display system info with ASCII art\n");
+    terminal_writestring("  calc     - Calculator (usage: calc 10 + 3)\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
     terminal_writestring("  reboot   - Restart the computer\n");
     terminal_writestring("  shutdown - Shutdown the computer\n");
@@ -1137,6 +1146,7 @@ void cmd_which(const char* args) {
         "sconsole","checkfs","install","ls","cat","edit","write","rm",
         "touch","mkdir","rmdir","cd","pwd","mem","uptime","color",
         "reboot","shutdown","cp","mv","rename","which","tree",
+        "date","hexdump","wc","head","sleep","history","neofetch","calc",
         "divan", 0
     };
 
@@ -1234,5 +1244,498 @@ void cmd_tree(void) {
     terminal_writestring("\n");
     tree_print_dir(".", 0);
     terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// date / time — read from CMOS RTC
+// ═══════════════════════════════════════════════════════════════════
+
+static void print_2digit(uint8_t val) {
+    terminal_putchar('0' + val / 10);
+    terminal_putchar('0' + val % 10);
+}
+
+void cmd_date(void) {
+    rtc_time_t t;
+    rtc_read(&t);
+
+    static const char* wday_names[] = {
+        "???", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"
+    };
+    static const char* month_names[] = {
+        "???","Jan","Feb","Mar","Apr","May","Jun",
+        "Jul","Aug","Sep","Oct","Nov","Dec"
+    };
+
+    uint8_t val = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    uint8_t lbl = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    terminal_setcolor(val);
+    if (t.weekday >= 1 && t.weekday <= 7)
+        terminal_writestring(wday_names[t.weekday]);
+    else
+        terminal_writestring("???");
+
+    terminal_setcolor(lbl);
+    terminal_writestring(" ");
+
+    terminal_setcolor(val);
+    if (t.month >= 1 && t.month <= 12)
+        terminal_writestring(month_names[t.month]);
+    else
+        terminal_writestring("???");
+
+    terminal_writestring(" ");
+    print_2digit(t.day);
+    terminal_writestring(" ");
+    print_uint32(t.year);
+    terminal_writestring(" ");
+    print_2digit(t.hour);
+    terminal_putchar(':');
+    print_2digit(t.minute);
+    terminal_putchar(':');
+    print_2digit(t.second);
+
+    terminal_setcolor(lbl);
+    terminal_writestring(" UTC\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// hexdump — hex view of a file
+// ═══════════════════════════════════════════════════════════════════
+
+static void print_hex_byte(uint8_t b) {
+    static const char hex[] = "0123456789ABCDEF";
+    terminal_putchar(hex[b >> 4]);
+    terminal_putchar(hex[b & 0x0F]);
+}
+
+static void print_hex32(uint32_t v) {
+    for (int i = 28; i >= 0; i -= 4) {
+        static const char hex[] = "0123456789ABCDEF";
+        terminal_putchar(hex[(v >> i) & 0xF]);
+    }
+}
+
+void cmd_hexdump(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: hexdump <filename>\n");
+        return;
+    }
+
+    static char buf[FS_MAX_FILESIZE];
+    uint32_t size;
+    if (fs_read(args, buf, &size) != 0) {
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
+        terminal_writestring("Error: File not found: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+        return;
+    }
+
+    uint8_t off_color  = vga_entry_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
+    uint8_t hex_color  = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t asc_color  = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    uint8_t norm_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    for (uint32_t off = 0; off < size; off += 16) {
+        // Offset
+        terminal_setcolor(off_color);
+        print_hex32(off);
+        terminal_writestring("  ");
+
+        // Hex bytes
+        terminal_setcolor(hex_color);
+        for (int i = 0; i < 16; i++) {
+            if (off + i < size) {
+                print_hex_byte((uint8_t)buf[off + i]);
+            } else {
+                terminal_writestring("  ");
+            }
+            terminal_putchar(' ');
+            if (i == 7) terminal_putchar(' ');
+        }
+
+        terminal_writestring(" ");
+
+        // ASCII
+        terminal_setcolor(asc_color);
+        terminal_putchar('|');
+        for (int i = 0; i < 16; i++) {
+            if (off + i < size) {
+                char c = buf[off + i];
+                terminal_putchar((c >= 32 && c < 127) ? c : '.');
+            }
+        }
+        terminal_putchar('|');
+        terminal_writestring("\n");
+    }
+
+    terminal_setcolor(norm_color);
+    print_uint32(size);
+    terminal_writestring(" bytes\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// wc — word / line / character count
+// ═══════════════════════════════════════════════════════════════════
+
+void cmd_wc(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: wc <filename>\n");
+        return;
+    }
+
+    static char buf[FS_MAX_FILESIZE];
+    uint32_t size;
+    if (fs_read(args, buf, &size) != 0) {
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
+        terminal_writestring("Error: File not found: ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+        return;
+    }
+
+    uint32_t lines = 0, words = 0, chars = size;
+    int in_word = 0;
+
+    for (uint32_t i = 0; i < size; i++) {
+        if (buf[i] == '\n') lines++;
+        if (buf[i] == ' ' || buf[i] == '\n' || buf[i] == '\t' || buf[i] == '\r') {
+            in_word = 0;
+        } else {
+            if (!in_word) { words++; in_word = 1; }
+        }
+    }
+    if (size > 0 && buf[size - 1] != '\n') lines++;  // count last line
+
+    uint8_t val = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    uint8_t lbl = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    terminal_setcolor(val);
+    print_uint32(lines);
+    terminal_setcolor(lbl);
+    terminal_writestring(" lines  ");
+    terminal_setcolor(val);
+    print_uint32(words);
+    terminal_setcolor(lbl);
+    terminal_writestring(" words  ");
+    terminal_setcolor(val);
+    print_uint32(chars);
+    terminal_setcolor(lbl);
+    terminal_writestring(" chars  ");
+    terminal_writestring(args);
+    terminal_writestring("\n");
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// head — show first N lines (default 10)
+// ═══════════════════════════════════════════════════════════════════
+
+void cmd_head(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: head <filename> [lines]\n");
+        return;
+    }
+
+    // Parse: filename [count]
+    char filename[256];
+    int i = 0;
+    while (args[i] && args[i] != ' ' && i < 255) { filename[i] = args[i]; i++; }
+    filename[i] = '\0';
+
+    int max_lines = 10;
+    if (args[i] == ' ') {
+        i++;
+        max_lines = 0;
+        while (args[i] >= '0' && args[i] <= '9') {
+            max_lines = max_lines * 10 + (args[i] - '0');
+            i++;
+        }
+        if (max_lines == 0) max_lines = 10;
+    }
+
+    static char buf[FS_MAX_FILESIZE];
+    uint32_t size;
+    if (fs_read(filename, buf, &size) != 0) {
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
+        terminal_writestring("Error: File not found: ");
+        terminal_writestring(filename);
+        terminal_writestring("\n");
+        terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+        return;
+    }
+
+    int line_count = 0;
+    for (uint32_t j = 0; j < size && line_count < max_lines; j++) {
+        terminal_putchar(buf[j]);
+        if (buf[j] == '\n') line_count++;
+    }
+    if (size > 0 && buf[size - 1] != '\n') terminal_putchar('\n');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// sleep — wait N seconds
+// ═══════════════════════════════════════════════════════════════════
+
+void cmd_sleep(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: sleep <seconds>\n");
+        return;
+    }
+
+    int secs = 0;
+    int i = 0;
+    while (args[i] >= '0' && args[i] <= '9') {
+        secs = secs * 10 + (args[i] - '0');
+        i++;
+    }
+
+    if (secs <= 0 || secs > 3600) {
+        terminal_writestring("Usage: sleep <seconds> (1-3600)\n");
+        return;
+    }
+
+    timer_wait((uint32_t)secs * TIMER_HZ);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// history — show command history
+// ═══════════════════════════════════════════════════════════════════
+
+extern char history[10][256];
+extern int history_count;
+
+void cmd_history(void) {
+    if (history_count == 0) {
+        terminal_writestring("No history.\n");
+        return;
+    }
+
+    uint8_t idx_color = vga_entry_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
+    uint8_t cmd_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+
+    for (int i = history_count - 1; i >= 0; i--) {
+        terminal_setcolor(idx_color);
+        print_uint32((uint32_t)(history_count - i));
+        terminal_writestring("  ");
+        terminal_setcolor(cmd_color);
+        terminal_writestring(history[i]);
+        terminal_writestring("\n");
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// neofetch — ASCII art system info
+// ═══════════════════════════════════════════════════════════════════
+
+void cmd_neofetch(void) {
+    uint8_t art_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+    uint8_t lbl_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    uint8_t val_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    uint8_t sep_color = vga_entry_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
+
+    char cpu_vendor[13];
+    cpu_get_vendor(cpu_vendor);
+
+    uint32_t ticks = timer_get_ticks();
+    uint32_t secs  = ticks / TIMER_HZ;
+    uint32_t mins  = secs / 60;
+    uint32_t hours = mins / 60;
+    secs %= 60; mins %= 60;
+
+    rtc_time_t t;
+    rtc_read(&t);
+
+    // Line 1: logo + user@ao-os
+    terminal_setcolor(art_color);
+    terminal_writestring("     _    ___     ___  ____    ");
+    terminal_setcolor(val_color);
+    terminal_writestring("root");
+    terminal_setcolor(sep_color);
+    terminal_writestring("@");
+    terminal_setcolor(val_color);
+    terminal_writestring("ao-os\n");
+
+    // Line 2
+    terminal_setcolor(art_color);
+    terminal_writestring("    / \\  / _ \\   / _ \\/ ___|   ");
+    terminal_setcolor(sep_color);
+    terminal_writestring("---------------------\n");
+
+    // Line 3: OS
+    terminal_setcolor(art_color);
+    terminal_writestring("   / _ \\| | | | | | | \\___ \\   ");
+    terminal_setcolor(lbl_color);
+    terminal_writestring("OS: ");
+    terminal_setcolor(val_color);
+    terminal_writestring("AO OS " KERNEL_VERSION_STRING " " KERNEL_CODENAME "\n");
+
+    // Line 4: Arch
+    terminal_setcolor(art_color);
+    terminal_writestring("  / ___ \\ |_| | | |_| |___) |  ");
+    terminal_setcolor(lbl_color);
+    terminal_writestring("Arch: ");
+    terminal_setcolor(val_color);
+#if defined(__x86_64__) || defined(__LP64__)
+    terminal_writestring("x86_64\n");
+#else
+    terminal_writestring("x86\n");
+#endif
+
+    // Line 5: CPU
+    terminal_setcolor(art_color);
+    terminal_writestring(" /_/   \\_\\___/   \\___/|____/   ");
+    terminal_setcolor(lbl_color);
+    terminal_writestring("CPU: ");
+    terminal_setcolor(val_color);
+    terminal_writestring(cpu_vendor);
+    terminal_writestring("\n");
+
+    // Line 6: Memory
+    terminal_setcolor(art_color);
+    terminal_writestring("                               ");
+    terminal_setcolor(lbl_color);
+    terminal_writestring("Mem: ");
+    terminal_setcolor(val_color);
+    print_size(memory_get_used());
+    terminal_writestring(" / ");
+    print_size(HEAP_SIZE);
+    terminal_writestring("\n");
+
+    // Line 7: Uptime
+    terminal_setcolor(art_color);
+    terminal_writestring("                               ");
+    terminal_setcolor(lbl_color);
+    terminal_writestring("Uptime: ");
+    terminal_setcolor(val_color);
+    if (hours > 0) { print_uint32(hours); terminal_writestring("h "); }
+    print_uint32(mins); terminal_writestring("m ");
+    print_uint32(secs); terminal_writestring("s\n");
+
+    // Line 8: Shell
+    terminal_writestring("                               ");
+    terminal_setcolor(lbl_color);
+    terminal_writestring("Shell: ");
+    terminal_setcolor(val_color);
+    terminal_writestring("aosh\n");
+
+    // Line 9: Time
+    terminal_writestring("                               ");
+    terminal_setcolor(lbl_color);
+    terminal_writestring("Time: ");
+    terminal_setcolor(val_color);
+    print_2digit(t.hour);
+    terminal_putchar(':');
+    print_2digit(t.minute);
+    terminal_putchar(':');
+    print_2digit(t.second);
+    terminal_writestring(" UTC\n");
+
+    // Color palette bar
+    terminal_writestring("                               ");
+    for (int c = 0; c < 8; c++) {
+        terminal_setcolor(vga_entry_color((enum vga_color)c, (enum vga_color)c));
+        terminal_writestring("  ");
+    }
+    terminal_writestring("\n                               ");
+    for (int c = 8; c < 16; c++) {
+        terminal_setcolor(vga_entry_color((enum vga_color)c, (enum vga_color)c));
+        terminal_writestring("  ");
+    }
+    terminal_writestring("\n");
+
+    terminal_setcolor(lbl_color);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// calc — simple integer calculator
+// ═══════════════════════════════════════════════════════════════════
+
+void cmd_calc(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: calc <expr>  (e.g. calc 10 + 3)\n");
+        terminal_writestring("Operators: + - * / %\n");
+        return;
+    }
+
+    // Parse: number op number
+    int i = 0;
+    int neg1 = 0;
+
+    // Skip spaces
+    while (args[i] == ' ') i++;
+    if (args[i] == '-') { neg1 = 1; i++; }
+
+    long a = 0;
+    if (args[i] < '0' || args[i] > '9') {
+        terminal_writestring("Error: Expected number\n");
+        return;
+    }
+    while (args[i] >= '0' && args[i] <= '9') { a = a * 10 + (args[i] - '0'); i++; }
+    if (neg1) a = -a;
+
+    while (args[i] == ' ') i++;
+
+    char op = args[i++];
+    if (op != '+' && op != '-' && op != '*' && op != '/' && op != '%') {
+        terminal_writestring("Error: Unknown operator '");
+        terminal_putchar(op);
+        terminal_writestring("'\n");
+        return;
+    }
+
+    while (args[i] == ' ') i++;
+    int neg2 = 0;
+    if (args[i] == '-') { neg2 = 1; i++; }
+
+    long b = 0;
+    if (args[i] < '0' || args[i] > '9') {
+        terminal_writestring("Error: Expected number\n");
+        return;
+    }
+    while (args[i] >= '0' && args[i] <= '9') { b = b * 10 + (args[i] - '0'); i++; }
+    if (neg2) b = -b;
+
+    long result;
+    switch (op) {
+        case '+': result = a + b; break;
+        case '-': result = a - b; break;
+        case '*': result = a * b; break;
+        case '/':
+            if (b == 0) { terminal_writestring("Error: Division by zero\n"); return; }
+            result = a / b;
+            break;
+        case '%':
+            if (b == 0) { terminal_writestring("Error: Division by zero\n"); return; }
+            result = a % b;
+            break;
+        default: return;
+    }
+
+    uint8_t val = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
+    uint8_t lbl = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+    terminal_setcolor(lbl);
+    terminal_writestring("= ");
+    terminal_setcolor(val);
+
+    if (result < 0) {
+        terminal_putchar('-');
+        result = -result;
+    }
+    if (result == 0) {
+        terminal_putchar('0');
+    } else {
+        char digits[20];
+        int d = 0;
+        long tmp = result;
+        while (tmp > 0) { digits[d++] = '0' + (int)(tmp % 10); tmp /= 10; }
+        while (d > 0) terminal_putchar(digits[--d]);
+    }
+
+    terminal_setcolor(lbl);
+    terminal_writestring("\n");
 }
 

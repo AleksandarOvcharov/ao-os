@@ -12,8 +12,8 @@
 static char command_buffer[MAX_COMMAND_LENGTH];
 static int command_index = 0;
 
-static char history[HISTORY_SIZE][MAX_COMMAND_LENGTH];
-static int history_count = 0;
+char history[HISTORY_SIZE][MAX_COMMAND_LENGTH];
+int history_count = 0;
 static int history_index = 0;
 static int browsing_history = 0;
 static uint8_t user_color = 0;
@@ -185,6 +185,22 @@ void shell_execute_command(const char* cmd) {
         cmd_which(args);
     } else if (strncmp(cmd, "tree", cmd_len) == 0 && cmd_len == 4) {
         cmd_tree();
+    } else if (strncmp(cmd, "date", cmd_len) == 0 && cmd_len == 4) {
+        cmd_date();
+    } else if (strncmp(cmd, "hexdump", cmd_len) == 0 && cmd_len == 7) {
+        cmd_hexdump(args);
+    } else if (strncmp(cmd, "wc", cmd_len) == 0 && cmd_len == 2) {
+        cmd_wc(args);
+    } else if (strncmp(cmd, "head", cmd_len) == 0 && cmd_len == 4) {
+        cmd_head(args);
+    } else if (strncmp(cmd, "sleep", cmd_len) == 0 && cmd_len == 5) {
+        cmd_sleep(args);
+    } else if (strncmp(cmd, "history", cmd_len) == 0 && cmd_len == 7) {
+        cmd_history();
+    } else if (strncmp(cmd, "neofetch", cmd_len) == 0 && cmd_len == 8) {
+        cmd_neofetch();
+    } else if (strncmp(cmd, "calc", cmd_len) == 0 && cmd_len == 4) {
+        cmd_calc(args);
     } else {
         // Check if command ends with .aob (AOB executable)
         if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".aob", 4) == 0) {

@@ -42,7 +42,8 @@ KERNEL_OBJS = \
     $(BUILD_DIR)/editor.o \
     $(BUILD_DIR)/installer.o \
     $(BUILD_DIR)/aob.o \
-    $(BUILD_DIR)/syscall.o
+    $(BUILD_DIR)/syscall.o \
+    $(BUILD_DIR)/rtc.o
 
 KERNEL_ELF  = $(BUILD_DIR)/ao-os.elf
 KERNEL_BIN  = $(BUILD_DIR)/ao-os.bin
@@ -140,6 +141,9 @@ $(BUILD_DIR)/aob.o: $(KERNEL_DIR)/aob/aob.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/syscall.o: $(KERNEL_DIR)/syscall.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/rtc.o: $(KERNEL_DIR)/drivers/rtc.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ── Link kernel binary ──────────────────────────────────────────────────────
