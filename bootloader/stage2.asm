@@ -636,6 +636,8 @@ load_kernel:
 .done_read:
     movzx eax, byte [boot_flag]
     a32   mov [fs:0x7000], al
+
+    ; ── Enter 32-bit protected mode first ───────────────────────────
     cli
     lgdt [gdt_ptr]
     mov  eax, cr0
@@ -690,19 +692,37 @@ msg_loading:  db "Loading kernel...", 0
 msg_disk_err: db "DISK READ ERROR!", 0
 
 ; ════════════════════════════════════════════════════════════════════
-; GDT
+; GDT — used for initial 32-bit protected mode (unreal mode + PM entry)
 ; ════════════════════════════════════════════════════════════════════
 align 8
 gdt:
 .null: dq 0x0000000000000000
-.code: dq 0x00CF9A000000FFFF
-.data: dq 0x00CF92000000FFFF
+.code: dq 0x00CF9A000000FFFF          ; 32-bit code, 4GB flat
+.data: dq 0x00CF92000000FFFF          ; 32-bit data, 4GB flat
 gdt_end:
 
 gdt_ptr:
     dw gdt_end - gdt - 1
     dd gdt
 
+; ════════════════════════════════════════════════════════════════════
+; 64-bit GDT — used for long mode
+; ════════════════════════════════════════════════════════════════════
+align 8
+gdt64:
+.null: dq 0x0000000000000000
+.code: dq 0x00209A0000000000          ; 64-bit code: L=1, D=0, P=1, DPL=0
+.data: dq 0x0000920000000000          ; 64-bit data: P=1, DPL=0, writable
+gdt64_end:
+
+gdt64_ptr:
+    dw gdt64_end - gdt64 - 1
+    dd gdt64
+    dd 0                              ; high 32 bits of base (for 64-bit lgdt)
+
+; ════════════════════════════════════════════════════════════════════
+; 32-bit protected mode: set up paging and switch to long mode
+; ════════════════════════════════════════════════════════════════════
 [BITS 32]
 pmode32:
     mov  ax, 0x10
@@ -712,6 +732,87 @@ pmode32:
     mov  gs, ax
     mov  ss, ax
     mov  esp, 0x00200000
-    jmp  0x08:0x100000
+
+    ; ── Build identity-mapped page tables at 0x1000 ─────────────────
+    ; PML4 @ 0x1000, PDPT @ 0x2000, PD0 @ 0x3000, PD1 @ 0x4000
+    ; Maps first 4 GB using 2 MB huge pages (2 page directories × 512 entries)
+
+    ; Zero out 4 pages (16 KB) for page tables
+    mov  edi, 0x1000
+    xor  eax, eax
+    mov  ecx, 4096               ; 16384 bytes / 4
+    rep  stosd
+
+    ; PML4[0] → PDPT @ 0x2000 (present + writable)
+    mov  dword [0x1000], 0x2003
+
+    ; PDPT[0] → PD0 @ 0x3000 (present + writable)
+    mov  dword [0x2000], 0x3003
+    ; PDPT[1] → PD1 @ 0x4000 (present + writable)
+    mov  dword [0x2008], 0x4003
+
+    ; Fill PD0: 512 entries × 2 MB = first 1 GB
+    mov  edi, 0x3000
+    mov  eax, 0x0000_0083        ; present + writable + page size (2MB)
+    mov  ecx, 512
+.fill_pd0:
+    mov  [edi], eax
+    mov  dword [edi+4], 0        ; high 32 bits = 0
+    add  eax, 0x00200000         ; next 2 MB
+    add  edi, 8
+    dec  ecx
+    jnz  .fill_pd0
+
+    ; Fill PD1: 512 entries × 2 MB = 1-2 GB
+    mov  edi, 0x4000
+    ; eax continues from 0x40000083 (1 GB mark)
+    mov  ecx, 512
+.fill_pd1:
+    mov  [edi], eax
+    mov  dword [edi+4], 0
+    add  eax, 0x00200000
+    add  edi, 8
+    dec  ecx
+    jnz  .fill_pd1
+
+    ; ── Enable PAE (CR4 bit 5) ──────────────────────────────────────
+    mov  eax, cr4
+    or   eax, (1 << 5)
+    mov  cr4, eax
+
+    ; ── Load PML4 into CR3 ──────────────────────────────────────────
+    mov  eax, 0x1000
+    mov  cr3, eax
+
+    ; ── Enable long mode (IA-32e) via EFER MSR ──────────────────────
+    mov  ecx, 0xC0000080         ; IA32_EFER MSR
+    rdmsr
+    or   eax, (1 << 8)          ; LME = Long Mode Enable
+    wrmsr
+
+    ; ── Enable paging (CR0 bit 31) — this activates long mode ───────
+    mov  eax, cr0
+    or   eax, (1 << 31)
+    mov  cr0, eax
+
+    ; ── Load 64-bit GDT and far-jump to 64-bit code ────────────────
+    lgdt [gdt64_ptr]
+    jmp  0x08:lmode64
+
+; ════════════════════════════════════════════════════════════════════
+; 64-bit long mode entry
+; ════════════════════════════════════════════════════════════════════
+[BITS 64]
+lmode64:
+    mov  ax, 0x10
+    mov  ds, ax
+    mov  es, ax
+    mov  fs, ax
+    mov  gs, ax
+    mov  ss, ax
+    mov  rsp, 0x00200000
+
+    ; Jump to kernel at 1 MB
+    jmp  0x100000
 
 times 2048 - ($ - $$) db 0

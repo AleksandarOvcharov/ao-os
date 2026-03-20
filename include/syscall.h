@@ -19,6 +19,6 @@
 #define SYS_SETCOLOR    13
 
 void syscall_init(void);
-int  syscall_dispatch(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t arg3);
+int  syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3);
 
 #endif

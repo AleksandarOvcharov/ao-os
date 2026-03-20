@@ -1,9 +1,10 @@
 # Makefile for AO-OS C Examples
 # Compiles C programs to raw binaries and AOB executables
 
-CC = i686-elf-gcc
-CFLAGS = -std=c99 -ffreestanding -O2 -nostdlib -fno-builtin -fno-stack-protector -fno-pic -m32 -I../include
-LDFLAGS = -nostdlib -Wl,--oformat=binary -Wl,-Ttext=0x200000 -m32
+CC = x86_64-elf-gcc
+CFLAGS = -std=c99 -ffreestanding -O2 -nostdlib -fno-builtin -fno-stack-protector -fno-pic \
+         -mno-red-zone -mcmodel=kernel -mno-sse -mno-mmx -mno-sse2 -I../include
+LDFLAGS = -nostdlib -Wl,--oformat=binary -Wl,-Ttext=0x200000
 
 AOBCOMPILE = ../tools/aobcompile
 

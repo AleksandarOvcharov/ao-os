@@ -39,12 +39,12 @@ static void fd_table_init(void) {
     }
 }
 
-int syscall_dispatch(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
+int syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) {
     (void)arg3;
 
     switch (num) {
         case SYS_PRINT:
-            if (arg1) terminal_writestring((const char*)arg1);
+            if (arg1) terminal_writestring((const char*)(uintptr_t)arg1);
             return 0;
 
         case SYS_PUTCHAR:
@@ -62,8 +62,8 @@ int syscall_dispatch(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t arg3) 
         }
 
         case SYS_READLINE: {
-            char* buf = (char*)arg1;
-            uint32_t maxlen = arg2;
+            char* buf = (char*)(uintptr_t)arg1;
+            uint32_t maxlen = (uint32_t)arg2;
             if (!buf || maxlen == 0) return -1;
             uint32_t i = 0;
             while (i < maxlen - 1) {
@@ -87,15 +87,14 @@ int syscall_dispatch(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t arg3) 
         }
 
         case SYS_EXIT:
-            // Return to caller - just return, execution returns to shell
             return (int)arg1;
 
         case SYS_UPTIME:
             return (int)timer_get_ticks();
 
         case SYS_SYSINFO: {
-            char* buf = (char*)arg1;
-            uint32_t maxlen = arg2;
+            char* buf = (char*)(uintptr_t)arg1;
+            uint32_t maxlen = (uint32_t)arg2;
             if (!buf || maxlen == 0) return -1;
             const char* name = "AO-OS";
             const char* ver  = KERNEL_VERSION_STRING;
@@ -108,7 +107,7 @@ int syscall_dispatch(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t arg3) 
         }
 
         case SYS_OPEN: {
-            const char* name = (const char*)arg1;
+            const char* name = (const char*)(uintptr_t)arg1;
             if (!name) return -1;
             for (int i = 0; i < MAX_FD; i++) {
                 if (!fd_table[i].used) {
@@ -128,8 +127,8 @@ int syscall_dispatch(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t arg3) 
 
         case SYS_READ: {
             int fd = (int)arg1;
-            char* buf = (char*)arg2;
-            uint32_t len = arg3;
+            char* buf = (char*)(uintptr_t)arg2;
+            uint32_t len = (uint32_t)arg3;
             if (fd < 0 || fd >= MAX_FD || !fd_table[fd].used || !buf) return -1;
             uint32_t remaining = fd_table[fd].size - fd_table[fd].pos;
             if (len > remaining) len = remaining;
@@ -140,8 +139,8 @@ int syscall_dispatch(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t arg3) 
         }
 
         case SYS_WRITE: {
-            const char* buf = (const char*)arg1;
-            uint32_t len = arg2;
+            const char* buf = (const char*)(uintptr_t)arg1;
+            uint32_t len = (uint32_t)arg2;
             if (!buf) return -1;
             for (uint32_t i = 0; i < len; i++)
                 terminal_putchar(buf[i]);

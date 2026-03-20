@@ -92,7 +92,11 @@ void cmd_about(void) {
     terminal_setcolor(normal_color);
     terminal_writestring("Architecture: ");
     terminal_setcolor(highlight_color);
+#if defined(__x86_64__) || defined(__LP64__)
+    terminal_writestring("x86_64 (64-bit)\n");
+#else
     terminal_writestring("x86 (32-bit)\n");
+#endif
     
     terminal_setcolor(normal_color);
     terminal_writestring("Author: ");
@@ -428,7 +432,16 @@ void cmd_sysinfo(void) {
     terminal_setcolor(value_color);
     terminal_writestring(cpu_vendor);
     terminal_writestring("\n");
-    
+
+    terminal_setcolor(label_color);
+    terminal_writestring("Arch:   ");
+    terminal_setcolor(value_color);
+#if defined(__x86_64__) || defined(__LP64__)
+    terminal_writestring("x86_64 (64-bit)\n");
+#else
+    terminal_writestring("x86 (32-bit)\n");
+#endif
+
     terminal_setcolor(label_color);
     terminal_writestring("RAM:    ");
     terminal_setcolor(value_color);

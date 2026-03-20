@@ -1,12 +1,13 @@
 # AO OS Makefile
 
 AS = nasm
-CC = i686-elf-gcc
-LD = i686-elf-gcc
+CC = x86_64-elf-gcc
+LD = x86_64-elf-gcc
 
-ASFLAGS_ELF = -f elf32
+ASFLAGS_ELF = -f elf64
 ASFLAGS_BIN = -f bin
-CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Iinclude
+CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Iinclude \
+          -mno-red-zone -mcmodel=kernel -mno-sse -mno-mmx -mno-sse2
 LDFLAGS = -T linker.ld -ffreestanding -O2 -nostdlib -lgcc
 
 BUILD_DIR      = build
@@ -147,7 +148,7 @@ $(KERNEL_ELF): $(BOOT_OBJ) $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
 $(KERNEL_BIN): $(KERNEL_ELF)
-	i686-elf-objcopy -O binary $< $@
+	x86_64-elf-objcopy -O binary $< $@
 
 # ── Assemble disk image ────────────────────────────────────────────────────
 # Layout:
@@ -173,8 +174,8 @@ iso: $(ISO_FILE)
 # ── Run targets ────────────────────────────────────────────────────────────
 
 run: iso
-	qemu-system-i386 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
-	                 -serial stdio -m 32
+	qemu-system-x86_64 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
+	                    -serial stdio -m 32
 
 floppy.img:
 	@echo "Creating floppy.img..."
@@ -182,9 +183,9 @@ floppy.img:
 	mkdosfs -F 12 floppy.img 2>/dev/null || mformat -i floppy.img -f 1440 :: 2>/dev/null || true
 
 run-disk: iso floppy.img
-	qemu-system-i386 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
-	                 -drive file=floppy.img,format=raw,if=ide \
-	                 -serial stdio -m 32
+	qemu-system-x86_64 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
+	                    -drive file=floppy.img,format=raw,if=ide \
+	                    -serial stdio -m 32
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_FILE) floppy.img

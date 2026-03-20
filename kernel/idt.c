@@ -7,12 +7,14 @@
 static idt_entry_t idt[IDT_ENTRIES];
 static idt_ptr_t idt_ptr;
 
-void idt_set_gate(uint8_t num, uint32_t base, uint16_t sel, uint8_t flags) {
-    idt[num].base_low = base & 0xFFFF;
-    idt[num].base_high = (base >> 16) & 0xFFFF;
-    idt[num].selector = sel;
-    idt[num].always0 = 0;
-    idt[num].flags = flags;
+void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags) {
+    idt[num].base_low  = (uint16_t)(base & 0xFFFF);
+    idt[num].base_mid  = (uint16_t)((base >> 16) & 0xFFFF);
+    idt[num].base_high = (uint32_t)((base >> 32) & 0xFFFFFFFF);
+    idt[num].selector  = sel;
+    idt[num].ist       = 0;
+    idt[num].flags     = flags;
+    idt[num].reserved  = 0;
 }
 
 extern void irq0_handler(void);
@@ -33,14 +35,14 @@ static void pic_remap(void) {
 
 void idt_init(void) {
     memset(&idt, 0, sizeof(idt_entry_t) * IDT_ENTRIES);
-    
+
     idt_ptr.limit = (sizeof(idt_entry_t) * IDT_ENTRIES) - 1;
-    idt_ptr.base = (uint32_t)&idt;
-    
+    idt_ptr.base = (uint64_t)(uintptr_t)&idt;
+
     pic_remap();
-    
-    idt_set_gate(32,   (uint32_t)irq0_handler,   0x08, 0x8E);
-    idt_set_gate(0x80, (uint32_t)syscall_handler, 0x08, 0xEE); // 0xEE = present, DPL=3, 32-bit interrupt gate
-    
-    idt_load((uint32_t)&idt_ptr);
+
+    idt_set_gate(32,   (uint64_t)(uintptr_t)irq0_handler,   0x08, 0x8E); // 0x8E = present, DPL=0, 64-bit interrupt gate
+    idt_set_gate(0x80, (uint64_t)(uintptr_t)syscall_handler, 0x08, 0xEE); // 0xEE = present, DPL=3, 64-bit interrupt gate
+
+    idt_load(&idt_ptr);
 }

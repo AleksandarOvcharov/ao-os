@@ -82,14 +82,14 @@ static void shell_load_from_history(int index) {
 }
 
 // Write argc/argv to fixed address 0x00091000 for user programs
-// Layout: [uint32_t argc][uint32_t argv[0]..argv[N-1]][strings...]
+// Layout: [uint64_t argc][uint64_t argv[0]..argv[N-1]][strings...]
 #define ARGV_BASE 0x00091000
 #define ARGV_MAX  16
 
 static void shell_setup_args(const char* full_cmd) {
-    volatile uint32_t* base = (volatile uint32_t*)ARGV_BASE;
-    // String storage starts after argc + ARGV_MAX pointers
-    char* strbuf = (char*)(ARGV_BASE + 4 + ARGV_MAX * 4);
+    volatile uint64_t* base = (volatile uint64_t*)ARGV_BASE;
+    // String storage starts after argc + ARGV_MAX pointers (each 8 bytes)
+    char* strbuf = (char*)(ARGV_BASE + 8 + ARGV_MAX * 8);
     int strbuf_pos = 0;
     int argc = 0;
 
@@ -103,13 +103,13 @@ static void shell_setup_args(const char* full_cmd) {
         while (*p && *p != ' ') p++;
         int tok_len = (int)(p - tok_start);
         // Write pointer into argv slot
-        base[1 + argc] = (uint32_t)(ARGV_BASE + 4 + ARGV_MAX * 4 + strbuf_pos);
+        base[1 + argc] = (uint64_t)(uintptr_t)(ARGV_BASE + 8 + ARGV_MAX * 8 + strbuf_pos);
         // Copy string
         for (int i = 0; i < tok_len; i++) strbuf[strbuf_pos++] = tok_start[i];
         strbuf[strbuf_pos++] = '\0';
         argc++;
     }
-    base[0] = (uint32_t)argc;
+    base[0] = (uint64_t)argc;
 }
 
 void shell_execute_command(const char* cmd) {

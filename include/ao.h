@@ -2,12 +2,14 @@
 #define AO_H
 
 // AO-OS User Program API
-// Uses int 0x80 syscalls: eax=num, ebx=arg1, ecx=arg2, edx=arg3
+// Uses int 0x80 syscalls: rax=num, rbx=arg1, rcx=arg2, rdx=arg3
 
 typedef unsigned char uint8_t;
 typedef unsigned short uint16_t;
 typedef unsigned int uint32_t;
+typedef unsigned long uint64_t;
 typedef unsigned long size_t;
+typedef unsigned long uintptr_t;
 
 // Syscall numbers (must match kernel/syscall.c)
 #define SYS_PRINT       1
@@ -44,8 +46,8 @@ enum vga_color {
     COLOR_WHITE = 15,
 };
 
-// Raw syscall: eax=num, ebx=arg1, ecx=arg2, edx=arg3, returns eax
-static inline int syscall(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t arg3) {
+// Raw syscall: rax=num, rbx=arg1, rcx=arg2, rdx=arg3, returns rax
+static inline int syscall(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) {
     int ret;
     __asm__ volatile (
         "int $0x80"
@@ -58,11 +60,11 @@ static inline int syscall(uint32_t num, uint32_t arg1, uint32_t arg2, uint32_t a
 
 // Console
 static inline void ao_print(const char* str) {
-    syscall(SYS_PRINT, (uint32_t)str, 0, 0);
+    syscall(SYS_PRINT, (uintptr_t)str, 0, 0);
 }
 
 static inline void ao_putchar(char c) {
-    syscall(SYS_PUTCHAR, (uint32_t)c, 0, 0);
+    syscall(SYS_PUTCHAR, (uint64_t)c, 0, 0);
 }
 
 static inline void ao_clear(void) {
@@ -75,7 +77,7 @@ static inline void ao_println(const char* str) {
 }
 
 static inline void ao_setcolor(enum vga_color fg, enum vga_color bg) {
-    syscall(SYS_SETCOLOR, (uint32_t)((int)fg | ((int)bg << 4)), 0, 0);
+    syscall(SYS_SETCOLOR, (uint64_t)((int)fg | ((int)bg << 4)), 0, 0);
 }
 
 // Keyboard
@@ -84,12 +86,12 @@ static inline int ao_getchar(void) {
 }
 
 static inline int ao_readline(char* buf, uint32_t maxlen) {
-    return syscall(SYS_READLINE, (uint32_t)buf, maxlen, 0);
+    return syscall(SYS_READLINE, (uintptr_t)buf, maxlen, 0);
 }
 
 // Process
 static inline void ao_exit(int code) {
-    syscall(SYS_EXIT, (uint32_t)code, 0, 0);
+    syscall(SYS_EXIT, (uint64_t)code, 0, 0);
 }
 
 // System
@@ -98,38 +100,38 @@ static inline int ao_uptime(void) {
 }
 
 static inline int ao_sysinfo(char* buf, uint32_t maxlen) {
-    return syscall(SYS_SYSINFO, (uint32_t)buf, maxlen, 0);
+    return syscall(SYS_SYSINFO, (uintptr_t)buf, maxlen, 0);
 }
 
 // Files
 static inline int ao_open(const char* name) {
-    return syscall(SYS_OPEN, (uint32_t)name, 0, 0);
+    return syscall(SYS_OPEN, (uintptr_t)name, 0, 0);
 }
 
 static inline int ao_read(int fd, char* buf, uint32_t len) {
-    return syscall(SYS_READ, (uint32_t)fd, (uint32_t)buf, len);
+    return syscall(SYS_READ, (uint64_t)fd, (uintptr_t)buf, len);
 }
 
 static inline int ao_write(const char* buf, uint32_t len) {
-    return syscall(SYS_WRITE, (uint32_t)buf, len, 0);
+    return syscall(SYS_WRITE, (uintptr_t)buf, len, 0);
 }
 
 static inline int ao_close(int fd) {
-    return syscall(SYS_CLOSE, (uint32_t)fd, 0, 0);
+    return syscall(SYS_CLOSE, (uint64_t)fd, 0, 0);
 }
 
 // argc/argv - written by shell before execution at 0x00091000
-// Layout: [uint32_t argc][uint32_t argv[0]..argv[15]][strings...]
+// Layout: [uint64_t argc][uint64_t argv[0]..argv[15]][strings...]
 #define AO_ARGV_BASE 0x00091000
 #define AO_ARGV_MAX  16
 
 static inline int ao_argc(void) {
-    return (int)(*(volatile uint32_t*)AO_ARGV_BASE);
+    return (int)(*(volatile uint64_t*)AO_ARGV_BASE);
 }
 
 static inline const char* ao_argv(int i) {
     if (i < 0 || i >= ao_argc()) return (const char*)0;
-    volatile uint32_t* base = (volatile uint32_t*)AO_ARGV_BASE;
+    volatile uint64_t* base = (volatile uint64_t*)AO_ARGV_BASE;
     return (const char*)base[1 + i];
 }
 
@@ -178,12 +180,12 @@ static inline void ao_memcpy(void* dest, const void* src, size_t num) {
 static inline void ao_itoa(int value, char* str) {
     int i = 0;
     int is_negative = 0;
-    
+
     if (value < 0) {
         is_negative = 1;
         value = -value;
     }
-    
+
     if (value == 0) {
         str[i++] = '0';
     } else {

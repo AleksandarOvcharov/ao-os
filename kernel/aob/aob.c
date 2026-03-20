@@ -76,12 +76,12 @@ int aob_execute(aob_context_t* ctx) {
     typedef void (*writestring_fn)(const char*);
     typedef void (*setcolor_fn)(uint8_t);
     typedef void (*clear_fn)(void);
-    volatile unsigned int* api = (volatile unsigned int*)0x00090000;
+    volatile uintptr_t* api = (volatile uintptr_t*)0x00090000;
     api[0] = AO_API_MAGIC;
-    api[1] = (unsigned int)(putchar_fn)terminal_putchar;
-    api[2] = (unsigned int)(writestring_fn)terminal_writestring;
-    api[3] = (unsigned int)(setcolor_fn)terminal_setcolor;
-    api[4] = (unsigned int)(clear_fn)terminal_clear;
+    api[1] = (uintptr_t)(putchar_fn)terminal_putchar;
+    api[2] = (uintptr_t)(writestring_fn)terminal_writestring;
+    api[3] = (uintptr_t)(setcolor_fn)terminal_setcolor;
+    api[4] = (uintptr_t)(clear_fn)terminal_clear;
     
     void (*entry_func)(void) = (void (*)(void))(exec_addr + ctx->entry_point);
     
