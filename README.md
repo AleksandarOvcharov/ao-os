@@ -1,48 +1,47 @@
 # AO OS - Aleksandar Ovcharov's Operating System
 
-A basic x86 operating system written in C and Assembly with a terminal-based interface.
+A 64-bit x86-64 operating system written in C and Assembly with a custom bootloader and terminal-based interface.
 
 ## Features
 
-- **Custom Bootloader**: Multiboot-compliant bootloader
+- **Custom 2-Stage Bootloader**: No GRUB dependency, boots directly into 64-bit long mode
+- **64-bit Long Mode**: Full x86-64 kernel with proper GDT, TSS, and paging
+- **CPU Exception Handling**: All 22 CPU exceptions (ISR 0-21) with blue-screen register dump
 - **VGA Text Mode**: 80x25 color text display with 1000-line scrollback (PageUp/PageDown)
-- **Keyboard Driver**: PS/2 keyboard support with shift key handling
-- **Interactive Shell**: Command-line interface with command parsing
-- PS/2 keyboard driver with shift key support
-- Interactive terminal/shell interface with colored prompts
-- Built-in commands: help, clear, echo, about, color, reboot, shutdown
-- Modular code structure for easy expansion
-- Serial console output for debugging
+- **Interrupt-Driven Keyboard**: PS/2 keyboard via IRQ1 with ring buffer (no polling)
+- **FAT12 Filesystem**: Full read/write with subdirectory support
+- **AOB Executable Format**: Custom binary format for user programs with syscall API
+- **40+ Shell Commands**: File operations, directory navigation, text editor, system tools
+- **Interactive Shell**: Command history, colored prompts, working directory display
+- Serial console output for debugging (COM1)
 
 ## Requirements
 
 - NASM (Netwide Assembler)
-- GCC cross-compiler for i686-elf
+- GCC cross-compiler (`x86_64-elf-gcc`)
 - GNU Make
-- GRUB (for creating bootable ISO)
-- xorriso (for ISO creation)
 - QEMU (for testing)
 
 ## Building and Running
 
 ### Prerequisites
 
-- `i686-elf-gcc` cross-compiler
+- `x86_64-elf-gcc` cross-compiler
 - `nasm` assembler
-- `grub-mkrescue` for creating bootable ISO
-- `qemu-system-i386` for testing
+- `qemu-system-x86_64` for testing
 
 ### Build Commands
 
 ```bash
 make          # Build the OS
 make run      # Run in QEMU (with serial console output)
+make run-disk # Run with a second FAT12 floppy disk
 make clean    # Clean build files
 ```
 
 ### Debugging
 
-The kernel outputs debug logs to both VGA display and serial console (COM1). When running with `make run`, kernel logs will appear in your terminal via QEMU's serial output. This is very useful for debugging kernel initialization and tracking system events.
+The kernel outputs debug logs to both VGA display and serial console (COM1). When running with `make run`, kernel logs will appear in your terminal via QEMU's serial output. CPU exceptions are also logged to serial with register values.
 
 ## Running
 
@@ -52,7 +51,7 @@ make run
 ```
 
 ### With VirtualBox or other VM
-Mount the `ao-os.iso` file as a CD-ROM and boot from it.
+Mount the `ao-os.iso` file as a disk image and boot from it.
 
 ## Cleaning
 
@@ -64,36 +63,50 @@ make clean
 
 ```
 ao-os/
-├── boot/              # Bootloader code
-│   └── boot.asm       # Multiboot bootloader
+├── bootloader/        # Custom 2-stage bootloader
+│   ├── stage1.asm     # Stage 1 MBR (512 bytes)
+│   └── stage2.asm     # Stage 2: boot menu, A20, 64-bit mode transition
+├── boot/              # Kernel entry and low-level assembly
+│   ├── boot.asm       # Kernel entry point (_start)
+│   ├── interrupt.asm  # ISR 0-21 exception handlers, IRQ0/1, syscall handler
+│   └── gdt.asm        # GDT (code/data/TSS segments) and TSS
 ├── kernel/            # Kernel source code
-│   ├── kernel.c       # Kernel entry point
+│   ├── kernel.c       # Kernel main and initialization
 │   ├── shell.c        # Shell main loop
+│   ├── idt.c          # IDT setup and PIC remapping
+│   ├── gdt.c          # GDT/TSS runtime initialization
+│   ├── exception.c    # CPU exception handler (blue screen + register dump)
+│   ├── panic.c        # Kernel panic (red screen)
+│   ├── cpu.c          # CPUID detection
+│   ├── syscall.c      # Syscall dispatcher
 │   ├── drivers/       # Device drivers
-│   │   ├── vga.c      # VGA text mode driver
-│   │   └── keyboard.c # PS/2 keyboard driver
-│   ├── lib/           # Library functions
-│   │   └── string.c   # String utilities
+│   │   ├── vga.c      # VGA text mode driver with scrollback
+│   │   ├── keyboard.c # PS/2 keyboard (IRQ1 interrupt-driven)
+│   │   ├── timer.c    # PIT timer driver (100 Hz)
+│   │   ├── serial.c   # COM1 serial console
+│   │   ├── ata.c      # ATA PIO disk driver
+│   │   └── rtc.c      # Real-time clock
+│   ├── fs/            # Filesystem
+│   │   ├── fs.c       # Filesystem abstraction layer
+│   │   ├── fat12.c    # FAT12 with subdirectory support
+│   │   └── ramfs.c    # RAM filesystem fallback
+│   ├── memory/        # Memory management
+│   │   └── memory.c   # Heap allocator (kmalloc/kfree)
 │   ├── shell/         # Shell commands
-│   │   └── commands.c # Command implementations
-│   └── system/        # System utilities
-│       └── system.c   # Reboot/shutdown functions
+│   │   └── commands.c # 40+ built-in commands
+│   ├── editor/        # Text editor
+│   │   └── editor.c   # In-OS text editor with status bar
+│   ├── aob/           # AOB executable loader
+│   │   └── aob.c      # AOB format parser and executor
+│   ├── installer/     # OS installer
+│   │   └── installer.c
+│   ├── system/        # System utilities
+│   │   └── system.c   # Reboot/shutdown
+│   └── lib/           # Library functions
+│       └── string.c   # String utilities
 ├── include/           # Header files
-│   ├── vga.h
-│   ├── keyboard.h
-│   ├── string.h
-│   ├── shell.h
-│   ├── commands.h
-│   ├── system.h
-│   └── io.h
-├── documentation/     # Documentation files
-│   ├── BUILD.md
-│   ├── FEATURES.md
-│   ├── CHANGELOG.md
-│   └── CONTRIBUTING.md
-├── build/             # Build output (generated)
-├── iso/               # ISO creation directory (generated)
-├── linker.ld          # Linker script
+├── documentation/     # Documentation
+├── linker.ld          # Linker script (kernel at 1MB)
 └── Makefile           # Build system
 ```
 

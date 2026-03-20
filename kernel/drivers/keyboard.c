@@ -21,28 +21,41 @@ static int shift_pressed = 0;
 static int ctrl_pressed = 0;
 static int extended_key = 0;
 
+/* Ring buffer for interrupt-driven keyboard input */
+#define KB_BUFFER_SIZE 256
+static unsigned char kb_buffer[KB_BUFFER_SIZE];
+static volatile int kb_head = 0;
+static volatile int kb_tail = 0;
+
+static unsigned char translate_scancode(unsigned char scancode);
+
 void keyboard_init(void) {
     shift_pressed = 0;
     ctrl_pressed = 0;
     extended_key = 0;
+    kb_head = 0;
+    kb_tail = 0;
 }
 
-unsigned char keyboard_getchar(void) {
-    unsigned char status;
-    unsigned char scancode;
-    
-    status = inb(0x64);
-    if (!(status & 0x01)) {
-        return 0;
+/* Called from IRQ1 handler in interrupt.asm */
+void keyboard_irq_handler(void) {
+    unsigned char scancode = inb(0x60);
+    unsigned char ch = translate_scancode(scancode);
+    if (ch != 0) {
+        int next = (kb_head + 1) % KB_BUFFER_SIZE;
+        if (next != kb_tail) {
+            kb_buffer[kb_head] = ch;
+            kb_head = next;
+        }
     }
-    
-    scancode = inb(0x60);
-    
+}
+
+static unsigned char translate_scancode(unsigned char scancode) {
     if (scancode == 0xE0) {
         extended_key = 1;
         return 0;
     }
-    
+
     if (scancode == 0x2A || scancode == 0x36) {
         shift_pressed = 1;
         return 0;
@@ -51,7 +64,7 @@ unsigned char keyboard_getchar(void) {
         shift_pressed = 0;
         return 0;
     }
-    
+
     if (scancode == 0x1D) {
         ctrl_pressed = 1;
         return 0;
@@ -60,12 +73,12 @@ unsigned char keyboard_getchar(void) {
         ctrl_pressed = 0;
         return 0;
     }
-    
+
     if (scancode & 0x80) {
         extended_key = 0;
         return 0;
     }
-    
+
     if (extended_key) {
         extended_key = 0;
         switch (scancode) {
@@ -78,7 +91,7 @@ unsigned char keyboard_getchar(void) {
             default: return 0;
         }
     }
-    
+
     if (scancode < sizeof(scancode_to_ascii)) {
         char ch;
         if (shift_pressed) {
@@ -86,17 +99,27 @@ unsigned char keyboard_getchar(void) {
         } else {
             ch = scancode_to_ascii[scancode];
         }
-        
+
         if (ctrl_pressed && ch >= 'a' && ch <= 'z') {
             return ch - 'a' + 1;
         }
         if (ctrl_pressed && ch >= 'A' && ch <= 'Z') {
             return ch - 'A' + 1;
         }
-        
+
         return ch;
     }
-    
+
+    return 0;
+}
+
+unsigned char keyboard_getchar(void) {
+    /* Read from interrupt ring buffer */
+    if (kb_tail != kb_head) {
+        unsigned char ch = kb_buffer[kb_tail];
+        kb_tail = (kb_tail + 1) % KB_BUFFER_SIZE;
+        return ch;
+    }
     return 0;
 }
 

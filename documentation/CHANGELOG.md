@@ -2,6 +2,51 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [1.5.0] - CPU Exceptions, GDT/TSS, and Interrupt-Driven Keyboard
+
+### Added
+- **CPU Exception Handlers (ISR 0-21)** in assembly
+  - All 22 CPU exceptions now have dedicated interrupt service routines
+  - Division by Zero, Invalid Opcode, General Protection Fault, Page Fault, Double Fault, and 16 more
+  - Exceptions with error codes (8, 10-14, 17, 21) handled correctly with uniform stack frame
+  - Common ISR stub saves all 15 general-purpose registers + CR2 for full register dump
+- **Blue Screen exception display**
+  - Blue-screen-style crash handler with detailed diagnostic information
+  - Full register dump (RAX-R15, CR2, RIP, CS, RSP, SS, RFLAGS)
+  - Exception name and interrupt number displayed
+  - Error code shown for relevant exceptions
+  - Page Fault specific info: faulting address (CR2), cause (read/write, present/not-present, user/kernel)
+  - Exception details also logged to serial console for debugging
+- **Global Descriptor Table (GDT)** in assembly
+  - Proper kernel-mode GDT with null, code (0x08), and data (0x10) segments
+  - 64-bit long mode segment descriptors
+  - `gdt_load` assembly function reloads CS via far return and all data segment registers
+  - Replaces reliance on bootloader GDT
+- **Task State Segment (TSS)**
+  - TSS descriptor (selector 0x18) in GDT, filled at runtime with actual TSS address
+  - RSP0 set for ring 3 to ring 0 stack switching
+  - IST1 with dedicated 4KB stack for Double Fault handler (prevents triple-fault on stack overflow)
+  - TSS loaded with `ltr` instruction during kernel init
+- **Interrupt-driven keyboard input**
+  - IRQ1 handler in assembly (`irq1_handler`) with proper register save/restore and PIC EOI
+  - 256-byte ring buffer for keyboard scancodes
+  - `keyboard_irq_handler()` C function processes scancodes into the buffer
+  - `keyboard_getchar()` now reads from ring buffer instead of polling port 0x60
+  - PIC mask updated to enable both IRQ0 (timer) and IRQ1 (keyboard)
+- **ISR stub table** in assembly
+  - Table of 22 function pointers to all exception ISR stubs
+  - Available for C code to reference programmatically
+- **IDT gate with IST support**
+  - `idt_set_gate_ist()` function to assign an Interrupt Stack Table entry to specific IDT gates
+  - Double Fault (ISR 8) uses IST1 for guaranteed clean stack
+
+### Changed
+- Kernel version bumped to 1.5.0
+- IDT now registers all 22 CPU exception handlers (ISR 0-21), IRQ0, IRQ1, and syscall
+- PIC mask changed from 0xFE to 0xFC to enable IRQ1 (keyboard)
+- Kernel initialization order: GDT/TSS first, then IDT
+- `interrupt.asm` rewritten with ISR macros, common stub, and modular structure
+
 ## [1.0.0] - AOB Executable Format
 
 ### Added

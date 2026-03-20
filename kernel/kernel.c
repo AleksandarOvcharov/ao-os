@@ -2,6 +2,7 @@
 #include "keyboard.h"
 #include "shell.h"
 #include "memory.h"
+#include "gdt.h"
 #include "idt.h"
 #include "timer.h"
 #include "klog.h"
@@ -23,6 +24,9 @@ void kernel_main(void) {
     
     klog_info("AO OS Kernel starting...");
     
+    klog_info("Initializing GDT and TSS...");
+    gdt_init();
+
     klog_info("Initializing IDT...");
     idt_init();
     syscall_init();

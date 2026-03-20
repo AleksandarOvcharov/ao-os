@@ -1,12 +1,28 @@
 # AO OS Features
 
-## AO-OS Features (v1.0.0 - Aurora)
+## AO-OS Features (v1.5.0 - Aurora)
 
 ### Core System
-- **Bootloader**: Multiboot-compliant bootloader compatible with GRUB
-- **Kernel**: 32-bit protected mode kernel written in C and Assembly
+- **Custom 2-Stage Bootloader**: Replaces GRUB, full control over boot sequence
+  - Stage 1 (MBR): Loads stage 2 from disk
+  - Stage 2: Interactive boot menu, A20 line, 64-bit mode transition, kernel loading
+- **Kernel**: 64-bit long mode kernel written in C and Assembly
+- **Global Descriptor Table (GDT)**: Kernel-mode GDT in assembly
+  - Null, kernel code (0x08), and kernel data (0x10) segments
+  - 64-bit long mode descriptors with proper flags
+  - Runtime GDT reload with far return for CS and data segment refresh
+- **Task State Segment (TSS)**:
+  - TSS descriptor (0x18) in GDT, filled at runtime
+  - RSP0 for ring 3 → ring 0 stack switching
+  - IST1 with dedicated 4KB stack for Double Fault (prevents triple-fault)
 - **Version System**: Kernel version tracking with build date
 - **Panic System**: Kernel panic handler for fatal errors with colored screen
+- **CPU Exception Handling (ISR 0-21)**:
+  - All 22 CPU exceptions handled: Division by Zero, Debug, NMI, Breakpoint, Overflow, Bound Range, Invalid Opcode, Device Not Available, Double Fault, Invalid TSS, Segment Not Present, Stack Fault, GPF, Page Fault, x87 FPE, Alignment Check, Machine Check, SIMD FPE, and more
+  - Blue-screen crash display with full register dump (RAX-R15, CR2, RIP, RFLAGS, CS, SS, RSP)
+  - Page Fault details: faulting address, read/write, present/not-present, user/kernel
+  - Double Fault uses IST1 dedicated stack for reliability
+  - Diagnostics logged to serial console
 - **Kernel Logging**:
   - Log levels: INFO, WARN, ERROR, DEBUG
   - Colored output for different log levels
@@ -15,12 +31,15 @@
 - **Interrupt Handling**:
   - Interrupt Descriptor Table (IDT) with 256 entries
   - PIC remapping for IRQ handling
-  - Timer interrupt (IRQ0) support
+  - 22 CPU exception handlers (ISR 0-21) with uniform stack frame
+  - Timer interrupt (IRQ0) and keyboard interrupt (IRQ1) support
+  - Syscall gate (INT 0x80) with DPL=3 for user programs
+  - IST support for critical exception handlers
 - **Timer System**:
   - PIT (Programmable Interval Timer) driver
   - System tick counter at 100 Hz
   - Uptime tracking
-- **Memory Management**: 
+- **Memory Management**:
   - Physical memory manager with 1 MB heap
   - Dynamic memory allocation (kmalloc/kfree)
   - Block-based allocator with automatic merging
@@ -101,9 +120,14 @@
   - Fallback when no disk filesystem detected
 
 ### Input
-- **Keyboard Driver**: PS/2 keyboard support
+- **Keyboard Driver**: PS/2 keyboard with interrupt-driven input (IRQ1)
+  - IRQ1 handler in assembly with proper register save/restore
+  - 256-byte ring buffer for non-blocking input
+  - No more busy-wait polling of port 0x60
 - **Shift Key**: Proper handling of shift key for uppercase and symbols
+- **Ctrl Key**: Ctrl+key combinations (e.g., Ctrl+S in editor)
 - **Arrow Keys**: Detection of arrow keys for navigation
+- **Extended Keys**: PageUp, PageDown for scrollback
 - **Scancode Translation**: ASCII conversion from keyboard scancodes
 
 ### Shell/Terminal
@@ -187,47 +211,43 @@
 ## Planned Features
 
 ### Short Term
-- [ ] Command history (up/down arrows)
 - [ ] Tab completion
-- [ ] More string utilities
-- [ ] Memory information command
-- [ ] CPU information detection
+- [ ] Shell piping and redirection (`|`, `>`, `<`)
+- [ ] Shell scripting / batch files
 
 ### Medium Term
-- [ ] File system support (basic)
-- [ ] Text editor
-- [ ] Calculator command
-- [ ] Timer/clock display
 - [ ] Multiple virtual terminals
+- [ ] PCI bus enumeration
+- [ ] DMA for disk I/O
+- [ ] User mode (ring 3) execution
 
 ### Long Term
-- [ ] Multitasking
-- [ ] User mode vs kernel mode
-- [ ] System calls
-- [ ] Process management
+- [ ] Multitasking and process scheduler
+- [ ] Virtual memory with page-level protection
+- [ ] Process management (fork/exec)
 - [ ] Network stack (basic)
 - [ ] Graphics mode support
 
 ## Technical Specifications
 
-- **Architecture**: x86 (32-bit)
-- **Boot Protocol**: Multiboot 1
+- **Architecture**: x86-64 (64-bit long mode)
+- **Boot Protocol**: Custom 2-stage bootloader (no GRUB)
 - **Display**: VGA Text Mode 3 (80x25)
-- **Input**: PS/2 Keyboard (Port 0x60/0x64)
-- **Language**: C (kernel) and Assembly (bootloader)
-- **Compiler**: GCC cross-compiler (i686-elf-gcc)
+- **Input**: PS/2 Keyboard (IRQ1 interrupt-driven, Port 0x60/0x64)
+- **Language**: C (kernel) and Assembly (bootloader, interrupts, GDT)
+- **Compiler**: GCC cross-compiler (x86_64-elf-gcc)
 - **Assembler**: NASM
 - **Linker**: GNU LD (via GCC)
-- **Bootloader**: GRUB 2
+- **Bootloader**: Custom 2-stage (stage1 MBR + stage2 mode switching)
 
 ## Hardware Requirements
 
 - **Minimum**:
-  - x86-compatible CPU (i386 or later)
+  - x86-64 compatible CPU (64-bit long mode support)
   - 32 MB RAM
   - VGA-compatible display
   - PS/2 keyboard
-  
+
 - **Recommended** (for virtual machines):
   - 64 MB RAM
-  - QEMU, VirtualBox, or VMware
+  - QEMU (qemu-system-x86_64), VirtualBox, or VMware

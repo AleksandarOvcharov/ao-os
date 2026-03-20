@@ -18,7 +18,7 @@ KERNEL_DIR     = kernel
 # Output — raw bootable disk image named .iso for familiarity
 ISO_FILE = ao-os.iso
 
-BOOT_OBJ = $(BUILD_DIR)/boot.o $(BUILD_DIR)/interrupt.o
+BOOT_OBJ = $(BUILD_DIR)/boot.o $(BUILD_DIR)/interrupt.o $(BUILD_DIR)/gdt_asm.o
 KERNEL_OBJS = \
     $(BUILD_DIR)/kernel.o \
     $(BUILD_DIR)/vga.o \
@@ -43,7 +43,9 @@ KERNEL_OBJS = \
     $(BUILD_DIR)/installer.o \
     $(BUILD_DIR)/aob.o \
     $(BUILD_DIR)/syscall.o \
-    $(BUILD_DIR)/rtc.o
+    $(BUILD_DIR)/rtc.o \
+    $(BUILD_DIR)/exception.o \
+    $(BUILD_DIR)/gdt.o
 
 KERNEL_ELF  = $(BUILD_DIR)/ao-os.elf
 KERNEL_BIN  = $(BUILD_DIR)/ao-os.bin
@@ -72,6 +74,9 @@ $(BUILD_DIR)/boot.o: $(BOOT_DIR)/boot.asm | $(BUILD_DIR)
 	$(AS) $(ASFLAGS_ELF) $< -o $@
 
 $(BUILD_DIR)/interrupt.o: $(BOOT_DIR)/interrupt.asm | $(BUILD_DIR)
+	$(AS) $(ASFLAGS_ELF) $< -o $@
+
+$(BUILD_DIR)/gdt_asm.o: $(BOOT_DIR)/gdt.asm | $(BUILD_DIR)
 	$(AS) $(ASFLAGS_ELF) $< -o $@
 
 $(BUILD_DIR)/kernel.o: $(KERNEL_DIR)/kernel.c | $(BUILD_DIR)
@@ -144,6 +149,12 @@ $(BUILD_DIR)/syscall.o: $(KERNEL_DIR)/syscall.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/rtc.o: $(KERNEL_DIR)/drivers/rtc.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/exception.o: $(KERNEL_DIR)/exception.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/gdt.o: $(KERNEL_DIR)/gdt.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ── Link kernel binary ──────────────────────────────────────────────────────

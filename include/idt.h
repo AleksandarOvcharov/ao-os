@@ -21,8 +21,10 @@ typedef struct {
 
 void idt_init(void);
 void idt_set_gate(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags);
+void idt_set_gate_ist(uint8_t num, uint64_t base, uint16_t sel, uint8_t flags, uint8_t ist);
 
 extern void idt_load(void*);
 extern void irq0_handler(void);
+extern void irq1_handler(void);
 
 #endif

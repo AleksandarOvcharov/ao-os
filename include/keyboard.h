@@ -11,6 +11,7 @@
 #define KEY_PAGEDOWN 0x85
 
 void keyboard_init(void);
+void keyboard_irq_handler(void);
 unsigned char keyboard_getchar(void);
 void keyboard_wait_for_key(void);
 
