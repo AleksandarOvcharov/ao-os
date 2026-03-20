@@ -2,11 +2,14 @@
 #include "keyboard.h"
 #include "shell.h"
 #include "memory.h"
+#include "pmm.h"
+#include "vmm.h"
 #include "gdt.h"
 #include "idt.h"
 #include "timer.h"
 #include "klog.h"
 #include "serial.h"
+#include "cpu.h"
 #include "ata.h"
 #include "fs.h"
 #include "syscall.h"
@@ -21,39 +24,50 @@
 void kernel_main(void) {
     terminal_initialize();
     serial_init();
-    
+
     klog_info("AO OS Kernel starting...");
-    
+
+    klog_info("Detecting CPU...");
+    cpu_detect();
+
     klog_info("Initializing GDT and TSS...");
     gdt_init();
 
     klog_info("Initializing IDT...");
     idt_init();
     syscall_init();
-    
+
     klog_info("Initializing PIT timer...");
     timer_init(TIMER_HZ);
-    
+
     asm volatile("sti");
-    
+
     timer_wait(30);
-    
-    klog_info("Initializing memory manager...");
+
+    klog_info("Initializing physical memory manager...");
+    pmm_init();
+    timer_wait(20);
+
+    klog_info("Initializing virtual memory manager...");
+    vmm_init();
+    timer_wait(20);
+
+    klog_info("Initializing kernel heap...");
     memory_init();
-    timer_wait(30);
-    
+    timer_wait(20);
+
     klog_info("Initializing ATA disk driver...");
     ata_init();
     timer_wait(30);
-    
+
     klog_info("Initializing filesystem...");
     fs_init();
     timer_wait(30);
-    
+
     klog_info("Initializing keyboard driver...");
     keyboard_init();
     timer_wait(30);
-    
+
     klog_info("Kernel initialization complete!");
     timer_wait(50);
     terminal_writestring("\n");
@@ -66,7 +80,7 @@ void kernel_main(void) {
 
     shell_init();
     shell_run();
-    
+
     while (1) {
         asm volatile("hlt");
     }

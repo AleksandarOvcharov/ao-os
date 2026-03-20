@@ -65,6 +65,35 @@ stage2_main:
     mov  cr0, eax
     sti
 
+    ; ── E820 Memory Map Detection ──────────────────────────────────────
+    ; Store at 0x6000 (free low memory, below boot sector at 0x7C00):
+    ;   [uint16_t count] [entries × 24 bytes each]
+    ; Entry format: base(8) + length(8) + type(4) + acpi_ext(4)
+    xor  bp, bp              ; entry counter
+    mov  di, 0x6004          ; first entry starts after count word
+    xor  ebx, ebx            ; continuation = 0 = start
+.e820_loop:
+    mov  eax, 0xE820
+    mov  ecx, 24             ; request 24 bytes per entry
+    mov  edx, 0x534D4150     ; 'SMAP' magic
+    int  0x15
+    jc   .e820_done          ; CF = error or not supported
+    cmp  eax, 0x534D4150     ; verify 'SMAP' returned
+    jne  .e820_done
+    ; Skip zero-length entries
+    cmp  dword [di+8], 0
+    jne  .e820_valid
+    cmp  dword [di+12], 0
+    je   .e820_skip
+.e820_valid:
+    inc  bp
+    add  di, 24
+.e820_skip:
+    test ebx, ebx            ; ebx=0 means last entry
+    jnz  .e820_loop
+.e820_done:
+    mov  [0x6000], bp        ; store entry count
+
     ; ── VGA mode 3, hide cursor ───────────────────────────────────────
     mov  ax, 0x0003
     int  0x10
@@ -675,7 +704,7 @@ KERNEL_SECS  equ 256
 
 str_hdr:      db "AO OS  Bootloader", 0
 str_os:       db "AO  OS", 0
-str_tag:      db "v1.4.1  -  Aurora", 0
+str_tag:      db "v1.6.0  -  Aurora", 0
 str_prompt:   db "Please select a boot option:", 0
 str_opt0:     db "Boot AO OS normally", 0
 str_opt1:     db "Reinstall  /  Format disk", 0
@@ -718,7 +747,7 @@ gdt64_end:
 gdt64_ptr:
     dw gdt64_end - gdt64 - 1
     dd gdt64
-    dd 0                              ; high 32 bits of base (for 64-bit lgdt)
+    dd 0  `                            ; high 32 bits of base (for 64-bit lgdt)
 
 ; ════════════════════════════════════════════════════════════════════
 ; 32-bit protected mode: set up paging and switch to long mode

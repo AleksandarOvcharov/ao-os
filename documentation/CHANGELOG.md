@@ -2,6 +2,48 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [1.6.0] - 64-bit Memory Management, E820, Enhanced CPUID
+
+### Added
+- **E820 Memory Map Detection** in bootloader assembly
+  - INT 0x15 EAX=0xE820 called in real mode before entering protected mode
+  - Memory map stored at 0x6000 (safe low memory, below boot sector)
+  - Supports up to 128 entries, skips zero-length regions
+  - Provides accurate physical RAM layout to kernel
+- **Physical Page Frame Allocator (PMM)**
+  - Bitmap-based allocator managing all 4KB physical pages
+  - Supports up to 4 GB of RAM (1,048,576 pages, 128 KB bitmap)
+  - Initialized from E820 memory map; falls back to 32 MB assumption
+  - `pmm_alloc_page()` / `pmm_free_page()` for page-level allocation
+  - Automatically reserves low memory (0-1MB), kernel code/data/BSS, and heap
+  - Tracks total, free, and used page counts
+- **Virtual Memory Manager (VMM)**
+  - 4-level page table management (PML4, PDPT, PD, PT)
+  - Uses bootloader's identity-mapped 2MB pages as base
+  - `vmm_map_page()` maps individual 4KB virtual-to-physical pages
+  - `vmm_unmap_page()` removes mappings with TLB invalidation
+  - `vmm_get_physical()` walks page tables to resolve virtual addresses
+  - Automatic 2MB huge page splitting when mapping 4KB pages within a huge page
+  - Allocates intermediate page table pages from PMM on demand
+- **Enhanced CPUID Detection**
+  - Full CPU brand string (48-char, e.g. "Intel Core i7-..." or "AMD Ryzen...")
+  - Feature flag detection: FPU, SSE, SSE2, SSE3, SSE4.1, SSE4.2, AVX, APIC
+  - Extended features: NX bit, Long Mode
+  - CPU family, model, and stepping identification
+  - `cpu_detect()` called early in kernel init; `cpu_get_info()` returns full struct
+- **Heap location fix**
+  - Heap now placed after `_kernel_end` (linker symbol), no longer overlaps kernel code
+  - `_kernel_start` and `_kernel_end` exported from linker script
+  - Heap pages explicitly reserved in PMM via `pmm_mark_region_used()`
+
+### Changed
+- Kernel version bumped to 1.6.0
+- `mem` command now shows physical RAM (from E820/PMM) and kernel heap separately
+- `sysinfo` command shows CPU brand string and feature flags instead of just vendor
+- `neofetch` shows CPU brand string and total physical RAM
+- Kernel init order: CPU detect → GDT/TSS → IDT → Timer → PMM → VMM → Heap → drivers
+- `cpu_detect_memory()` now returns actual physical RAM size from PMM instead of HEAP_SIZE
+
 ## [1.5.0] - CPU Exceptions, GDT/TSS, and Interrupt-Driven Keyboard
 
 ### Added

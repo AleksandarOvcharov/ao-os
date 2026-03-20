@@ -45,7 +45,9 @@ KERNEL_OBJS = \
     $(BUILD_DIR)/syscall.o \
     $(BUILD_DIR)/rtc.o \
     $(BUILD_DIR)/exception.o \
-    $(BUILD_DIR)/gdt.o
+    $(BUILD_DIR)/gdt.o \
+    $(BUILD_DIR)/pmm.o \
+    $(BUILD_DIR)/vmm.o
 
 KERNEL_ELF  = $(BUILD_DIR)/ao-os.elf
 KERNEL_BIN  = $(BUILD_DIR)/ao-os.bin
@@ -155,6 +157,12 @@ $(BUILD_DIR)/exception.o: $(KERNEL_DIR)/exception.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/gdt.o: $(KERNEL_DIR)/gdt.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/pmm.o: $(KERNEL_DIR)/memory/pmm.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/vmm.o: $(KERNEL_DIR)/memory/vmm.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ── Link kernel binary ──────────────────────────────────────────────────────

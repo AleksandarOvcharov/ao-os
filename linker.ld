@@ -6,6 +6,8 @@ SECTIONS
 {
     . = 1M;
 
+    _kernel_start = .;
+
     .text BLOCK(4K) : ALIGN(4K)
     {
         *(.text)
@@ -27,4 +29,7 @@ SECTIONS
         *(COMMON)
         *(.bss)
     }
+
+    . = ALIGN(4K);
+    _kernel_end = .;
 }

@@ -4,9 +4,11 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 
 ## Features
 
-- **Custom 2-Stage Bootloader**: No GRUB dependency, boots directly into 64-bit long mode
-- **64-bit Long Mode**: Full x86-64 kernel with proper GDT, TSS, and paging
+- **Custom 2-Stage Bootloader**: No GRUB dependency, boots directly into 64-bit long mode with E820 memory detection
+- **64-bit Long Mode**: Full x86-64 kernel with proper GDT, TSS, and 4-level paging
+- **Memory Management**: E820 memory map, bitmap PMM (up to 4 GB), VMM with 4-level page tables
 - **CPU Exception Handling**: All 22 CPU exceptions (ISR 0-21) with blue-screen register dump
+- **Enhanced CPUID**: Brand string, feature flags (SSE, AVX, NX...), family/model/stepping
 - **VGA Text Mode**: 80x25 color text display with 1000-line scrollback (PageUp/PageDown)
 - **Interrupt-Driven Keyboard**: PS/2 keyboard via IRQ1 with ring buffer (no polling)
 - **FAT12 Filesystem**: Full read/write with subdirectory support
@@ -91,7 +93,9 @@ ao-os/
 │   │   ├── fat12.c    # FAT12 with subdirectory support
 │   │   └── ramfs.c    # RAM filesystem fallback
 │   ├── memory/        # Memory management
-│   │   └── memory.c   # Heap allocator (kmalloc/kfree)
+│   │   ├── pmm.c      # Physical page frame allocator (bitmap, E820)
+│   │   ├── vmm.c      # Virtual memory manager (4-level page tables)
+│   │   └── memory.c   # Kernel heap allocator (kmalloc/kfree)
 │   ├── shell/         # Shell commands
 │   │   └── commands.c # 40+ built-in commands
 │   ├── editor/        # Text editor

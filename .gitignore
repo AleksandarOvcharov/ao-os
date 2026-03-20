@@ -29,6 +29,7 @@ tools/aobcompile
 # OS specific
 .DS_Store
 Thumbs.db
+lc.exe
 
 # Temporary files
 *.tmp

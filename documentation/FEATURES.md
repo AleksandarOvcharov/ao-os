@@ -1,6 +1,6 @@
 # AO OS Features
 
-## AO-OS Features (v1.5.0 - Aurora)
+## AO-OS Features (v1.6.0 - Aurora)
 
 ### Core System
 - **Custom 2-Stage Bootloader**: Replaces GRUB, full control over boot sequence
@@ -40,10 +40,16 @@
   - System tick counter at 100 Hz
   - Uptime tracking
 - **Memory Management**:
-  - Physical memory manager with 1 MB heap
+  - **E820 Memory Map**: BIOS INT 0x15 detection in bootloader, accurate physical RAM layout
+  - **Physical Page Frame Allocator (PMM)**: Bitmap-based, manages all 4KB pages up to 4 GB
+  - **Virtual Memory Manager (VMM)**: 4-level page tables (PML4/PDPT/PD/PT), map/unmap 4KB pages, 2MB huge page splitting
+  - **Kernel Heap**: 1 MB heap placed after kernel image (`_kernel_end`), backed by PMM
   - Dynamic memory allocation (kmalloc/kfree)
   - Block-based allocator with automatic merging
   - Memory safety checks (double-free, invalid pointer detection)
+- **Enhanced CPUID**:
+  - CPU brand string (48-char), vendor, family/model/stepping
+  - Feature detection: FPU, SSE, SSE2, SSE3, SSE4.1, SSE4.2, AVX, APIC, NX, Long Mode
 
 ### Display
 - **VGA Text Mode**: 80x25 character display

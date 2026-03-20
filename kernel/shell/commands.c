@@ -4,6 +4,7 @@
 #include "string.h"
 #include "version.h"
 #include "memory.h"
+#include "pmm.h"
 #include "timer.h"
 #include "cpu.h"
 #include "shell.h"
@@ -273,37 +274,61 @@ void cmd_mem(void) {
     uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
     uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     uint8_t value_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    
-    size_t total = HEAP_SIZE;
-    size_t used = memory_get_used();
-    size_t free = memory_get_free();
-    
+    uint8_t dim_color = vga_entry_color(VGA_COLOR_DARK_GREY, VGA_COLOR_BLACK);
+
     terminal_setcolor(title_color);
     terminal_writestring("========================================\n");
     terminal_writestring("  Memory Information\n");
     terminal_writestring("========================================\n");
-    
+
+    /* Physical memory (from E820 + PMM) */
+    terminal_setcolor(title_color);
+    terminal_writestring("Physical Memory:\n");
+
     terminal_setcolor(label_color);
-    terminal_writestring("Total Heap:  ");
+    terminal_writestring("  Total RAM:   ");
     terminal_setcolor(value_color);
-    print_size(total);
+    print_size(pmm_get_total_memory());
     terminal_writestring("\n");
-    
+
     terminal_setcolor(label_color);
-    terminal_writestring("Used:        ");
+    terminal_writestring("  Free Pages:  ");
     terminal_setcolor(value_color);
-    print_size(used);
-    terminal_writestring("\n");
-    
+    print_size(pmm_get_free_pages() * 4096);
+    terminal_setcolor(dim_color);
+    terminal_writestring("  (4 KB pages)\n");
+
     terminal_setcolor(label_color);
-    terminal_writestring("Free:        ");
+    terminal_writestring("  Used Pages:  ");
     terminal_setcolor(value_color);
-    print_size(free);
+    print_size((pmm_get_total_pages() - pmm_get_free_pages()) * 4096);
     terminal_writestring("\n");
-    
+
+    /* Kernel heap */
+    terminal_setcolor(title_color);
+    terminal_writestring("Kernel Heap:\n");
+
+    terminal_setcolor(label_color);
+    terminal_writestring("  Total Heap:  ");
+    terminal_setcolor(value_color);
+    print_size(HEAP_SIZE);
+    terminal_writestring("\n");
+
+    terminal_setcolor(label_color);
+    terminal_writestring("  Used:        ");
+    terminal_setcolor(value_color);
+    print_size(memory_get_used());
+    terminal_writestring("\n");
+
+    terminal_setcolor(label_color);
+    terminal_writestring("  Free:        ");
+    terminal_setcolor(value_color);
+    print_size(memory_get_free());
+    terminal_writestring("\n");
+
     terminal_setcolor(title_color);
     terminal_writestring("========================================\n");
-    
+
     terminal_setcolor(label_color);
 }
 
@@ -421,69 +446,65 @@ void cmd_sysinfo(void) {
     uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
     uint8_t label_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
     uint8_t value_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    
-    char cpu_vendor[13];
-    cpu_get_vendor(cpu_vendor);
-    
-    uint32_t ram_kb = cpu_detect_memory();
-    
+
+    const cpu_info_t* cpu = cpu_get_info();
+
     uint32_t ticks = timer_get_ticks();
     uint32_t seconds = ticks / TIMER_HZ;
-    
+
     terminal_setcolor(title_color);
     terminal_writestring("AO OS ");
     terminal_setcolor(value_color);
     terminal_writestring(KERNEL_VERSION_STRING);
     terminal_writestring("\n");
-    
+
     terminal_setcolor(label_color);
     terminal_writestring("CPU:    ");
     terminal_setcolor(value_color);
-    terminal_writestring(cpu_vendor);
+    /* Show brand string (trimmed of leading spaces) */
+    const char* brand = cpu->brand;
+    while (*brand == ' ') brand++;
+    if (*brand) {
+        terminal_writestring(brand);
+    } else {
+        terminal_writestring(cpu->vendor);
+    }
     terminal_writestring("\n");
 
     terminal_setcolor(label_color);
     terminal_writestring("Arch:   ");
     terminal_setcolor(value_color);
-#if defined(__x86_64__) || defined(__LP64__)
-    terminal_writestring("x86_64 (64-bit)\n");
-#else
-    terminal_writestring("x86 (32-bit)\n");
-#endif
+    terminal_writestring("x86_64 (64-bit)");
+    if (cpu->ext_features & CPU_EXT_NX)
+        terminal_writestring(", NX");
+    terminal_writestring("\n");
+
+    terminal_setcolor(label_color);
+    terminal_writestring("Feat:   ");
+    terminal_setcolor(value_color);
+    if (cpu->features_edx & CPU_FEAT_FPU) terminal_writestring("FPU ");
+    if (cpu->features_edx & CPU_FEAT_SSE) terminal_writestring("SSE ");
+    if (cpu->features_edx & CPU_FEAT_SSE2) terminal_writestring("SSE2 ");
+    if (cpu->features_ecx & CPU_FEAT_SSE3) terminal_writestring("SSE3 ");
+    if (cpu->features_ecx & CPU_FEAT_SSE41) terminal_writestring("SSE4.1 ");
+    if (cpu->features_ecx & CPU_FEAT_SSE42) terminal_writestring("SSE4.2 ");
+    if (cpu->features_ecx & CPU_FEAT_AVX) terminal_writestring("AVX ");
+    if (cpu->features_edx & CPU_FEAT_APIC) terminal_writestring("APIC ");
+    terminal_writestring("\n");
 
     terminal_setcolor(label_color);
     terminal_writestring("RAM:    ");
     terminal_setcolor(value_color);
-    
-    char buffer[32];
-    int i = 0;
-    uint32_t temp = ram_kb;
-    if (temp == 0) {
-        buffer[i++] = '0';
-    } else {
-        char digits[12];
-        int j = 0;
-        while (temp > 0) {
-            digits[j++] = '0' + (temp % 10);
-            temp /= 10;
-        }
-        while (j > 0) {
-            buffer[i++] = digits[--j];
-        }
-    }
-    buffer[i++] = ' ';
-    buffer[i++] = 'K';
-    buffer[i++] = 'B';
-    buffer[i] = '\0';
-    terminal_writestring(buffer);
+    print_size(pmm_get_total_memory());
     terminal_writestring("\n");
     
     terminal_setcolor(label_color);
     terminal_writestring("Uptime: ");
     terminal_setcolor(value_color);
-    
-    i = 0;
-    temp = seconds;
+
+    char buffer[32];
+    int i = 0;
+    uint32_t temp = seconds;
     if (temp == 0) {
         buffer[i++] = '0';
     } else {
@@ -1591,7 +1612,13 @@ void cmd_neofetch(void) {
     terminal_setcolor(lbl_color);
     terminal_writestring("CPU: ");
     terminal_setcolor(val_color);
-    terminal_writestring(cpu_vendor);
+    {
+        const cpu_info_t* cpuinfo = cpu_get_info();
+        const char* b = cpuinfo->brand;
+        while (*b == ' ') b++;
+        if (*b) terminal_writestring(b);
+        else terminal_writestring(cpu_vendor);
+    }
     terminal_writestring("\n");
 
     // Line 6: Memory
@@ -1602,7 +1629,7 @@ void cmd_neofetch(void) {
     terminal_setcolor(val_color);
     print_size(memory_get_used());
     terminal_writestring(" / ");
-    print_size(HEAP_SIZE);
+    print_size(pmm_get_total_memory());
     terminal_writestring("\n");
 
     // Line 7: Uptime
