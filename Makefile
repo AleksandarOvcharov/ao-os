@@ -7,8 +7,12 @@ LD = x86_64-elf-gcc
 ASFLAGS_ELF = -f elf64
 ASFLAGS_BIN = -f bin
 CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Iinclude \
-          -mno-red-zone -mcmodel=kernel -mno-sse -mno-mmx -mno-sse2
+          -mno-red-zone -mcmodel=kernel -mno-sse -mno-mmx -mno-sse2 \
+          -MMD -MP
 LDFLAGS = -T linker.ld -ffreestanding -O2 -nostdlib -lgcc
+
+# Pull in auto-generated header dependencies
+-include $(BUILD_DIR)/*.d
 
 BUILD_DIR      = build
 BOOT_DIR       = boot
@@ -47,7 +51,8 @@ KERNEL_OBJS = \
     $(BUILD_DIR)/exception.o \
     $(BUILD_DIR)/gdt.o \
     $(BUILD_DIR)/pmm.o \
-    $(BUILD_DIR)/vmm.o
+    $(BUILD_DIR)/vmm.o \
+    $(BUILD_DIR)/process.o
 
 KERNEL_ELF  = $(BUILD_DIR)/ao-os.elf
 KERNEL_BIN  = $(BUILD_DIR)/ao-os.bin
@@ -163,6 +168,9 @@ $(BUILD_DIR)/pmm.o: $(KERNEL_DIR)/memory/pmm.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/vmm.o: $(KERNEL_DIR)/memory/vmm.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/process.o: $(KERNEL_DIR)/process/process.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # ── Link kernel binary ──────────────────────────────────────────────────────

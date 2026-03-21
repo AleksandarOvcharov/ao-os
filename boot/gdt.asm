@@ -53,6 +53,26 @@ gdt_start:
     db 0            ; Base mid-high (set by C)
     dd 0            ; Base high (set by C)
     dd 0            ; Reserved
+
+    ; Entry 4: User Data Segment (selector 0x28, RPL 3 = 0x2B)
+    ; Base=0, Limit=0xFFFFF, Access=0xF2 (present, ring 3, data, read/write)
+    ; Flags=0xC (32-bit, 4K granularity)
+    dw 0xFFFF       ; Limit low
+    dw 0x0000       ; Base low
+    db 0x00         ; Base mid
+    db 11110010b    ; Access: P=1, DPL=11, S=1, Type=0010 (data, read/write)
+    db 11001111b    ; Flags=1100 (G=1, D/B=1), Limit high=1111
+    db 0x00         ; Base high
+
+    ; Entry 5: User Code Segment (selector 0x30, RPL 3 = 0x33)
+    ; Base=0, Limit=0xFFFFF, Access=0xFA (present, ring 3, code, exec/read)
+    ; Flags=0xA (64-bit, 4K granularity)
+    dw 0xFFFF       ; Limit low
+    dw 0x0000       ; Base low
+    db 0x00         ; Base mid
+    db 11111010b    ; Access: P=1, DPL=11, S=1, Type=1010 (code, exec/read)
+    db 10101111b    ; Flags=1010 (G=1, L=1), Limit high=1111
+    db 0x00         ; Base high
 gdt_end:
 
 ; GDT descriptor (pointer for lgdt)

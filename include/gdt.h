@@ -5,6 +5,9 @@
 
 void gdt_init(void);
 
+/* Update RSP0 in TSS (kernel stack for ring 3 -> ring 0 transitions) */
+void tss_set_rsp0(uint64_t rsp0);
+
 /* Assembly functions */
 extern void gdt_load(void* gdt_descriptor);
 

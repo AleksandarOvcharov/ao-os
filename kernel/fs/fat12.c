@@ -46,7 +46,9 @@ static void fat12_read_lfn(fat12_dir_entry_t* entries, int sfn_idx, char* buf, i
     }
 done:
     tmp[tmp_len] = '\0';
-    for (int k = 0; k <= tmp_len && k < buf_size; k++) buf[k] = tmp[k];
+    if (tmp_len >= buf_size) tmp_len = buf_size - 1;
+    for (int k = 0; k < tmp_len; k++) buf[k] = tmp[k];
+    buf[tmp_len] = '\0';
 }
 
 static fat12_bpb_t bpb;
@@ -59,6 +61,7 @@ static uint16_t current_dir_cluster = 0; // 0 = root directory
 
 static uint16_t fat12_get_next_cluster(uint16_t cluster) {
     uint32_t fat_offset = cluster + (cluster / 2);
+    if (fat_offset + 1 >= sizeof(fat_table)) return 0xFFF;
     uint16_t fat_value = *(uint16_t*)&fat_table[fat_offset];
     
     if (cluster & 1) {
@@ -72,6 +75,7 @@ static uint16_t fat12_get_next_cluster(uint16_t cluster) {
 
 static void fat12_set_cluster_value(uint16_t cluster, uint16_t value) {
     uint32_t fat_offset = cluster + (cluster / 2);
+    if (fat_offset + 1 >= sizeof(fat_table)) return;
     uint16_t* fat_entry = (uint16_t*)&fat_table[fat_offset];
     
     if (cluster & 1) {

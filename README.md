@@ -7,13 +7,15 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - **Custom 2-Stage Bootloader**: No GRUB dependency, boots directly into 64-bit long mode with E820 memory detection
 - **64-bit Long Mode**: Full x86-64 kernel with proper GDT, TSS, and 4-level paging
 - **Memory Management**: E820 memory map, bitmap PMM (up to 4 GB), VMM with 4-level page tables
+- **Process Management**: Process creation, round-robin scheduler, preemptive context switching
+- **User Mode (Ring 3)**: User programs run in ring 3 with kernel/user separation via GDT and page tables
 - **CPU Exception Handling**: All 22 CPU exceptions (ISR 0-21) with blue-screen register dump
 - **Enhanced CPUID**: Brand string, feature flags (SSE, AVX, NX...), family/model/stepping
 - **VGA Text Mode**: 80x25 color text display with 1000-line scrollback (PageUp/PageDown)
 - **Interrupt-Driven Keyboard**: PS/2 keyboard via IRQ1 with ring buffer (no polling)
 - **FAT12 Filesystem**: Full read/write with subdirectory support
 - **AOB Executable Format**: Custom binary format for user programs with syscall API
-- **40+ Shell Commands**: File operations, directory navigation, text editor, system tools
+- **40+ Shell Commands**: File operations, directory navigation, text editor, system tools, process management (`ps`, `kill`)
 - **Interactive Shell**: Command history, colored prompts, working directory display
 - Serial console output for debugging (COM1)
 
@@ -100,6 +102,8 @@ ao-os/
 │   │   └── commands.c # 40+ built-in commands
 │   ├── editor/        # Text editor
 │   │   └── editor.c   # In-OS text editor with status bar
+│   ├── process/       # Process management
+│   │   └── process.c  # Process creation, scheduler, context switching
 │   ├── aob/           # AOB executable loader
 │   │   └── aob.c      # AOB format parser and executor
 │   ├── installer/     # OS installer
@@ -140,6 +144,48 @@ ao-os/
 
 black, blue, green, cyan, red, magenta, brown, light_grey, dark_grey, 
 light_blue, light_green, light_cyan, light_red, light_magenta, yellow, white
+
+## Architecture
+
+```
+bootloader --> kernel --> drivers --> fs --> memory --> process --> user programs
+     |            |          |         |       |           |            |
+  stage1/2    kernel.c    vga.c    fat12.c  pmm.c    scheduler     AOB format
+              gdt/idt    keyboard   ramfs   vmm.c   context switch  syscalls
+                          timer             heap    ring 3 support  int 0x80
+```
+
+### Process Model
+
+AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
+
+- **Kernel process (PID 0)** runs the shell in ring 0
+- **User processes (PID 1+)** execute AOB binaries in ring 3 (user mode)
+- **Round-robin scheduler** with 50ms time quantum, driven by PIT timer at 100Hz
+- **Context switching** saves/restores all 15 GPRs + CPU interrupt frame (RIP, CS, RFLAGS, RSP, SS)
+- **TSS** provides RSP0 for automatic ring 3 -> ring 0 stack switching on interrupts
+- **Syscall interface** via `int 0x80` allows user programs to request kernel services
+
+## Limitations
+
+- Single user process at a time (shared virtual address space at 0x200000)
+- No per-process page tables (all processes share the kernel page table)
+- FAT12 filesystem without caching or permissions
+- No networking support
+- AOB executable format without dynamic linking or arguments passing to ring 3
+- No inter-process communication (IPC)
+- No signals or asynchronous event delivery
+
+## Roadmap
+
+- [ ] Per-process page tables (memory isolation between processes)
+- [ ] True concurrent multitasking (multiple user processes with separate address spaces)
+- [ ] Improved executable format (ELF support, dynamic linking)
+- [ ] FAT12 write optimizations and sector caching
+- [ ] Graphics mode (VESA framebuffer)
+- [ ] Networking stack (NE2000/virtio-net)
+- [ ] IPC mechanisms (pipes, shared memory)
+- [ ] Virtual filesystem (VFS) with mount points
 
 ## Documentation
 

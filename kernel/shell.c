@@ -5,6 +5,7 @@
 #include "commands.h"
 #include "fs.h"
 #include "aob.h"
+#include "process.h"
 
 #define MAX_COMMAND_LENGTH 256
 #define HISTORY_SIZE 10
@@ -201,6 +202,52 @@ void shell_execute_command(const char* cmd) {
         cmd_neofetch();
     } else if (strncmp(cmd, "calc", cmd_len) == 0 && cmd_len == 4) {
         cmd_calc(args);
+    } else if (strncmp(cmd, "ps", cmd_len) == 0 && cmd_len == 2) {
+        /* List processes */
+        process_t* list;
+        int max = process_list(&list);
+        uint8_t hdr_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
+        uint8_t normal = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
+        terminal_setcolor(hdr_color);
+        terminal_writestring("PID  STATE       NAME\n");
+        terminal_setcolor(normal);
+        for (int i = 0; i < max; i++) {
+            if (list[i].state == PROC_UNUSED) continue;
+            /* PID */
+            char num[8];
+            int n = (int)list[i].pid;
+            int pos = 0;
+            if (n == 0) { num[pos++] = '0'; }
+            else { char tmp[8]; int tp = 0; while (n > 0) { tmp[tp++] = '0' + (n % 10); n /= 10; }
+                   for (int j = tp - 1; j >= 0; j--) num[pos++] = tmp[j]; }
+            num[pos] = '\0';
+            terminal_writestring(num);
+            /* Pad */
+            for (int j = pos; j < 5; j++) terminal_writestring(" ");
+            /* State */
+            const char* states[] = {"UNUSED", "READY", "RUNNING", "BLOCKED", "TERMINATED"};
+            terminal_writestring(states[list[i].state]);
+            int slen = (int)strlen(states[list[i].state]);
+            for (int j = slen; j < 12; j++) terminal_writestring(" ");
+            /* Name */
+            terminal_writestring(list[i].name);
+            if (list[i].is_user) terminal_writestring(" [user]");
+            terminal_writestring("\n");
+        }
+    } else if (strncmp(cmd, "kill", cmd_len) == 0 && cmd_len == 4) {
+        if (strlen(args) == 0) {
+            terminal_writestring("Usage: kill <pid>\n");
+        } else {
+            int pid = 0;
+            const char* p = args;
+            while (*p >= '0' && *p <= '9') { pid = pid * 10 + (*p - '0'); p++; }
+            if (pid == 0) {
+                terminal_writestring("Cannot kill kernel process\n");
+            } else {
+                process_terminate((uint64_t)pid);
+                terminal_writestring("Process terminated\n");
+            }
+        }
     } else {
         // Check if command ends with .aob (AOB executable)
         if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".aob", 4) == 0) {
@@ -300,8 +347,9 @@ void shell_run(void) {
     
     while (1) {
         unsigned char c = keyboard_getchar();
-        
+
         if (c == 0) {
+            asm volatile("hlt");
             continue;
         }
         

@@ -704,7 +704,7 @@ KERNEL_SECS  equ 256
 
 str_hdr:      db "AO OS  Bootloader", 0
 str_os:       db "AO  OS", 0
-str_tag:      db "v1.6.0  -  Aurora", 0
+str_tag:      db "v2.0.0  -  Nova", 0
 str_prompt:   db "Please select a boot option:", 0
 str_opt0:     db "Boot AO OS normally", 0
 str_opt1:     db "Reinstall  /  Format disk", 0
@@ -747,7 +747,7 @@ gdt64_end:
 gdt64_ptr:
     dw gdt64_end - gdt64 - 1
     dd gdt64
-    dd 0  `                            ; high 32 bits of base (for 64-bit lgdt)
+    dd 0                               ; high 32 bits of base (for 64-bit lgdt)
 
 ; ════════════════════════════════════════════════════════════════════
 ; 32-bit protected mode: set up paging and switch to long mode

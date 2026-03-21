@@ -129,5 +129,6 @@ void keyboard_wait_for_key(void) {
         if (c != 0) {
             return;
         }
+        asm volatile("hlt");
     }
 }

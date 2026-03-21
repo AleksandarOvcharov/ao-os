@@ -1,20 +1,40 @@
 # AO OS Features
 
-## AO-OS Features (v1.6.0 - Aurora)
+## AO-OS Features (v2.0.0 - Nova)
 
 ### Core System
 - **Custom 2-Stage Bootloader**: Replaces GRUB, full control over boot sequence
   - Stage 1 (MBR): Loads stage 2 from disk
   - Stage 2: Interactive boot menu, A20 line, 64-bit mode transition, kernel loading
 - **Kernel**: 64-bit long mode kernel written in C and Assembly
-- **Global Descriptor Table (GDT)**: Kernel-mode GDT in assembly
-  - Null, kernel code (0x08), and kernel data (0x10) segments
+- **Global Descriptor Table (GDT)**: 6-entry GDT in assembly
+  - Null, kernel code (0x08), kernel data (0x10), TSS (0x18, 16-byte), user data (0x28), user code (0x30)
   - 64-bit long mode descriptors with proper flags
   - Runtime GDT reload with far return for CS and data segment refresh
 - **Task State Segment (TSS)**:
-  - TSS descriptor (0x18) in GDT, filled at runtime
-  - RSP0 for ring 3 → ring 0 stack switching
+  - TSS descriptor (0x18) in GDT, filled at runtime with actual TSS address
+  - RSP0 updated on every context switch for ring 3 → ring 0 stack switching
   - IST1 with dedicated 4KB stack for Double Fault (prevents triple-fault)
+- **Preemptive Multitasking**:
+  - Round-robin scheduler with 50ms time quantum
+  - Timer-driven (PIT at 100Hz) preemptive context switching
+  - Full register save/restore (15 GPRs + iretq frame) in assembly
+  - Up to 8 concurrent processes with per-process 8KB kernel stacks
+  - Process states: UNUSED, READY, RUNNING, BLOCKED, TERMINATED
+- **User Mode (Ring 3)**:
+  - User programs execute in ring 3 with hardware-enforced privilege separation
+  - Separate user code/data GDT segments with DPL=3
+  - User memory: code at 0x200000, stack at 0x800000 (16KB)
+  - TSS RSP0 ensures clean ring 3 → ring 0 transitions on interrupts
+- **Process Management**:
+  - Create, terminate, wait, and list processes
+  - Kernel process (PID 0) runs the shell
+  - User processes (PID 1+) run AOB binaries
+  - `ps` and `kill` shell commands
+- **Syscall Interface (int 0x80)**:
+  - System call dispatcher with SYS_WRITE, SYS_EXIT, SYS_OPEN, SYS_READ, SYS_CLOSE
+  - IDT gate at DPL=3 for user-mode access
+  - File descriptor table for user program I/O
 - **Version System**: Kernel version tracking with build date
 - **Panic System**: Kernel panic handler for fatal errors with colored screen
 - **CPU Exception Handling (ISR 0-21)**:
@@ -114,8 +134,9 @@
 - **ATA PIO Driver**: Primary ATA controller support
   - Read/write sectors using PIO mode
   - LBA28 addressing (up to 128GB disks)
+  - Timeout-protected wait functions (no infinite hangs)
   - Error detection and status checking
-  - Foundation for filesystem implementation
+  - Graceful fallback when no disk is attached
 - **RAM Filesystem (ramfs)**:
   - In-memory filesystem (data is lost on reboot)
   - Maximum of 16 files
@@ -127,9 +148,10 @@
 
 ### Input
 - **Keyboard Driver**: PS/2 keyboard with interrupt-driven input (IRQ1)
-  - IRQ1 handler in assembly with proper register save/restore
+  - IRQ1 handler in assembly with proper register save/restore and PIC EOI
   - 256-byte ring buffer for non-blocking input
-  - No more busy-wait polling of port 0x60
+  - `hlt`-based wait loops for power-efficient key waiting
+  - No busy-wait polling of port 0x60
 - **Shift Key**: Proper handling of shift key for uppercase and symbols
 - **Ctrl Key**: Ctrl+key combinations (e.g., Ctrl+S in editor)
 - **Arrow Keys**: Detection of arrow keys for navigation
@@ -225,14 +247,15 @@
 - [ ] Multiple virtual terminals
 - [ ] PCI bus enumeration
 - [ ] DMA for disk I/O
-- [ ] User mode (ring 3) execution
+- [ ] Per-process page tables (memory isolation)
+- [ ] ELF executable support
 
 ### Long Term
-- [ ] Multitasking and process scheduler
-- [ ] Virtual memory with page-level protection
-- [ ] Process management (fork/exec)
+- [ ] True concurrent user processes with separate address spaces
+- [ ] IPC mechanisms (pipes, shared memory)
 - [ ] Network stack (basic)
-- [ ] Graphics mode support
+- [ ] Graphics mode support (VESA framebuffer)
+- [ ] Virtual filesystem (VFS) with mount points
 
 ## Technical Specifications
 

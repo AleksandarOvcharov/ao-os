@@ -56,5 +56,10 @@ void gdt_init(void) {
     /* Load TSS (selector 0x18) */
     asm volatile("mov $0x18, %%ax; ltr %%ax" ::: "ax");
 
-    klog_info("GDT and TSS initialized");
+    klog_info("GDT and TSS initialized (with ring 3 segments)");
+}
+
+void tss_set_rsp0(uint64_t rsp0) {
+    uint8_t* tss_bytes = (uint8_t*)(uintptr_t)tss;
+    *(uint64_t*)(tss_bytes + 4) = rsp0;
 }

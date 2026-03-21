@@ -5,6 +5,7 @@
 #include "string.h"
 #include "timer.h"
 #include "version.h"
+#include "process.h"
 
 // Syscall numbers - must match ao.h
 #define SYS_PRINT       1
@@ -87,7 +88,9 @@ int syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) 
         }
 
         case SYS_EXIT:
-            return (int)arg1;
+            process_exit((int)arg1);
+            /* Never reached */
+            return 0;
 
         case SYS_UPTIME:
             return (int)timer_get_ticks();
@@ -113,6 +116,7 @@ int syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) 
                 if (!fd_table[i].used) {
                     uint32_t sz = 0;
                     if (fs_read(name, fd_table[i].data, &sz) != 0) return -1;
+                    if (sz > sizeof(fd_table[i].data)) return -1;
                     fd_table[i].size = sz;
                     fd_table[i].pos  = 0;
                     fd_table[i].used = 1;
@@ -130,6 +134,7 @@ int syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) 
             char* buf = (char*)(uintptr_t)arg2;
             uint32_t len = (uint32_t)arg3;
             if (fd < 0 || fd >= MAX_FD || !fd_table[fd].used || !buf) return -1;
+            if (fd_table[fd].pos >= fd_table[fd].size) return 0;
             uint32_t remaining = fd_table[fd].size - fd_table[fd].pos;
             if (len > remaining) len = remaining;
             for (uint32_t i = 0; i < len; i++)

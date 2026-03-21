@@ -27,6 +27,7 @@ typedef struct {
     void* code_ptr;           // Pointer to loaded code
     uint32_t code_size;       // Size of code
     uint32_t entry_point;     // Entry point offset
+    char name[32];            // Program name from header
 } aob_context_t;
 
 // AOB loader functions

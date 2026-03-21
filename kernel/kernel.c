@@ -14,6 +14,7 @@
 #include "fs.h"
 #include "syscall.h"
 #include "installer.h"
+#include "process.h"
 
 /* Boot flag written by stage2 bootloader at physical 0x7000:
  *   0x00 = normal boot
@@ -56,6 +57,10 @@ void kernel_main(void) {
     memory_init();
     timer_wait(20);
 
+    klog_info("Initializing process subsystem...");
+    process_init();
+    timer_wait(10);
+
     klog_info("Initializing ATA disk driver...");
     ata_init();
     timer_wait(30);
@@ -77,6 +82,8 @@ void kernel_main(void) {
         klog_info("Reinstall requested by bootloader");
         installer_run();
     }
+
+    scheduler_start();
 
     shell_init();
     shell_run();

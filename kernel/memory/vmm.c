@@ -57,12 +57,18 @@ int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
 
     uint64_t* pml4 = phys_to_virt(kernel_pml4_phys);
 
+    /* Determine parent entry flags - propagate PTE_USER if requested */
+    uint64_t parent_flags = PTE_PRESENT | PTE_WRITABLE;
+    if (flags & PTE_USER) parent_flags |= PTE_USER;
+
     /* Level 4: PML4 → PDPT */
     uint64_t pml4_idx = PML4_INDEX(virt);
     if (!(pml4[pml4_idx] & PTE_PRESENT)) {
         uint64_t pdpt_page = alloc_table_page();
         if (pdpt_page == 0) return -1;
-        pml4[pml4_idx] = pdpt_page | PTE_PRESENT | PTE_WRITABLE;
+        pml4[pml4_idx] = pdpt_page | parent_flags;
+    } else if (flags & PTE_USER) {
+        pml4[pml4_idx] |= PTE_USER;
     }
     uint64_t* pdpt = phys_to_virt(pml4[pml4_idx] & PTE_ADDR_MASK);
 
@@ -71,7 +77,9 @@ int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
     if (!(pdpt[pdpt_idx] & PTE_PRESENT)) {
         uint64_t pd_page = alloc_table_page();
         if (pd_page == 0) return -1;
-        pdpt[pdpt_idx] = pd_page | PTE_PRESENT | PTE_WRITABLE;
+        pdpt[pdpt_idx] = pd_page | parent_flags;
+    } else if (flags & PTE_USER) {
+        pdpt[pdpt_idx] |= PTE_USER;
     }
     uint64_t* pd = phys_to_virt(pdpt[pdpt_idx] & PTE_ADDR_MASK);
 
@@ -93,13 +101,15 @@ int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
         }
 
         /* Replace the 2MB PD entry with a pointer to the new PT */
-        pd[pd_idx] = pt_page | PTE_PRESENT | PTE_WRITABLE;
+        pd[pd_idx] = pt_page | parent_flags;
     }
 
     if (!(pd[pd_idx] & PTE_PRESENT)) {
         uint64_t pt_page = alloc_table_page();
         if (pt_page == 0) return -1;
-        pd[pd_idx] = pt_page | PTE_PRESENT | PTE_WRITABLE;
+        pd[pd_idx] = pt_page | parent_flags;
+    } else if (flags & PTE_USER) {
+        pd[pd_idx] |= PTE_USER;
     }
     uint64_t* pt = phys_to_virt(pd[pd_idx] & PTE_ADDR_MASK);
 

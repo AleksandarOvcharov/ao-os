@@ -2,6 +2,58 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [2.0.0] - Preemptive Multitasking, User Mode, Process Management
+
+### Added
+- **Preemptive Multitasking**
+  - Round-robin process scheduler with 50ms time quantum (5 ticks at 100Hz PIT)
+  - Full context switching: saves/restores all 15 GPRs + iretq frame (RIP, CS, RFLAGS, RSP, SS)
+  - Timer-driven scheduling via IRQ0 handler in assembly
+  - Process states: UNUSED, READY, RUNNING, BLOCKED, TERMINATED
+  - Up to 8 concurrent processes (1 kernel + 7 user)
+- **User Mode (Ring 3)**
+  - User programs execute in ring 3 with kernel/user segment separation
+  - GDT extended with user code (0x30, DPL=3) and user data (0x28, DPL=3) segments
+  - TSS RSP0 updated on context switch for ring 3 → ring 0 transitions
+  - User memory layout: code at 0x200000, stack at 0x800000 (16KB)
+  - VMM propagates PTE_USER flag to parent page table entries
+- **Process Management**
+  - `process_create()` — create kernel or user-mode processes with dedicated kernel stacks
+  - `process_exit()` — clean process termination with exit code
+  - `process_wait()` — block until target process terminates
+  - `process_terminate()` — kill a process by PID
+  - Per-process 8KB kernel stacks (16-byte aligned)
+  - `cpu_context_t` struct matching assembly push/pop order
+- **Syscall Interface (int 0x80)**
+  - Syscall dispatcher with System V AMD64 ABI calling convention
+  - SYS_WRITE (1), SYS_EXIT (2), SYS_OPEN (3), SYS_READ (4), SYS_CLOSE (5)
+  - IDT gate with DPL=3 so user-mode programs can invoke syscalls
+  - File descriptor table for user-mode file I/O
+- **Shell Commands**
+  - `ps` — list running processes with PID, state, and name
+  - `kill <pid>` — terminate a process by PID
+  - `which <command>` — show whether a command is builtin or external
+  - `calc <expr>` — basic integer calculator
+
+### Changed
+- Kernel version bumped to 2.0.0 (codename: Nova)
+- Boot menu version string updated to "v2.0.0 - Nova"
+- Kernel init order extended: ... → process_init → scheduler_start → shell_run
+- Shell busy loop uses `hlt` instruction to reduce CPU usage
+- `keyboard_wait_for_key()` uses `hlt` to avoid busy polling
+
+### Fixed
+- **IRQ0 handler EOI bug**: `mov al, 0x20` (PIC EOI) was clobbering the schedule_tick return value in RAX before it was used as the new stack pointer, causing General Protection Faults
+- **ATA driver infinite hangs**: `ata_wait_bsy()` and `ata_wait_drq()` now have timeouts instead of infinite loops; prevents system hang when no disk is attached (`make run` without floppy)
+- **Makefile header dependency tracking**: Added `-MMD -MP` to CFLAGS and `-include $(BUILD_DIR)/*.d` so header changes trigger recompilation
+- **Makefile `run-disk` target**: Fixed broken `-cdrom` flag to correct `-drive` syntax
+- **FAT12 `fat12_read_lfn` buffer overflow**: Fixed off-by-one in final copy loop (`k <= tmp_len` → `k < tmp_len`)
+- **FAT12 cluster bounds checking**: Added `fat_offset + 1 >= sizeof(fat_table)` guard in `fat12_get_next_cluster` and `fat12_set_cluster_value`
+- **SYS_READ integer underflow**: Added guard for `pos >= size` before computing remaining bytes
+- **SYS_OPEN size validation**: Added check that read size doesn't exceed fd buffer
+- **Stage2 stray backtick**: Removed stray backtick on line 750 that caused NASM warning
+- Simplified `print_size`, `cmd_uptime`, `cmd_sysinfo`, `cmd_ls`, and `cmd_calc` in commands.c
+
 ## [1.6.0] - 64-bit Memory Management, E820, Enhanced CPUID
 
 ### Added

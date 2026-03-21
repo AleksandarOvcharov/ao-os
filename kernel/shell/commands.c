@@ -59,6 +59,8 @@ void cmd_help(void) {
     terminal_writestring("  history  - Show command history\n");
     terminal_writestring("  neofetch - Display system info with ASCII art\n");
     terminal_writestring("  calc     - Calculator (usage: calc 10 + 3)\n");
+    terminal_writestring("  ps       - List running processes\n");
+    terminal_writestring("  kill     - Terminate a process (usage: kill <pid>)\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
     terminal_writestring("  reboot   - Restart the computer\n");
     terminal_writestring("  shutdown - Shutdown the computer\n");
@@ -198,75 +200,19 @@ void cmd_kernel(const char* args) {
     }
 }
 
+// Helper to print uint32 without libc (forward declaration, defined below)
+static void print_uint32(uint32_t n);
+
 static void print_size(size_t bytes) {
-    char buffer[32];
-    
     if (bytes >= 1024 * 1024) {
-        size_t mb = bytes / (1024 * 1024);
-        
-        int j = 0;
-        size_t temp = mb;
-        if (temp == 0) {
-            buffer[j++] = '0';
-        } else {
-            char digits[12];
-            int k = 0;
-            while (temp > 0) {
-                digits[k++] = '0' + (temp % 10);
-                temp /= 10;
-            }
-            while (k > 0) {
-                buffer[j++] = digits[--k];
-            }
-        }
-        buffer[j++] = ' ';
-        buffer[j++] = 'M';
-        buffer[j++] = 'B';
-        buffer[j] = '\0';
-        terminal_writestring(buffer);
+        print_uint32((uint32_t)(bytes / (1024 * 1024)));
+        terminal_writestring(" MB");
     } else if (bytes >= 1024) {
-        size_t kb = bytes / 1024;
-        
-        int j = 0;
-        size_t temp = kb;
-        if (temp == 0) {
-            buffer[j++] = '0';
-        } else {
-            char digits[12];
-            int k = 0;
-            while (temp > 0) {
-                digits[k++] = '0' + (temp % 10);
-                temp /= 10;
-            }
-            while (k > 0) {
-                buffer[j++] = digits[--k];
-            }
-        }
-        buffer[j++] = ' ';
-        buffer[j++] = 'K';
-        buffer[j++] = 'B';
-        buffer[j] = '\0';
-        terminal_writestring(buffer);
+        print_uint32((uint32_t)(bytes / 1024));
+        terminal_writestring(" KB");
     } else {
-        int j = 0;
-        size_t temp = bytes;
-        if (temp == 0) {
-            buffer[j++] = '0';
-        } else {
-            char digits[12];
-            int k = 0;
-            while (temp > 0) {
-                digits[k++] = '0' + (temp % 10);
-                temp /= 10;
-            }
-            while (k > 0) {
-                buffer[j++] = digits[--k];
-            }
-        }
-        buffer[j++] = ' ';
-        buffer[j++] = 'B';
-        buffer[j] = '\0';
-        terminal_writestring(buffer);
+        print_uint32((uint32_t)bytes);
+        terminal_writestring(" B");
     }
 }
 
@@ -351,92 +297,20 @@ void cmd_uptime(void) {
     terminal_writestring("System Uptime: ");
     terminal_setcolor(value_color);
     
-    char buffer[32];
-    
     if (days > 0) {
-        int i = 0;
-        uint32_t temp = days;
-        char digits[12];
-        int j = 0;
-        while (temp > 0) {
-            digits[j++] = '0' + (temp % 10);
-            temp /= 10;
-        }
-        while (j > 0) {
-            buffer[i++] = digits[--j];
-        }
-        buffer[i++] = ' ';
-        buffer[i++] = 'd';
-        buffer[i++] = 'a';
-        buffer[i++] = 'y';
-        if (days > 1) buffer[i++] = 's';
-        buffer[i++] = ' ';
-        buffer[i] = '\0';
-        terminal_writestring(buffer);
+        print_uint32(days);
+        terminal_writestring(days > 1 ? " days " : " day ");
     }
-    
     if (hours > 0 || days > 0) {
-        int i = 0;
-        uint32_t temp = hours;
-        if (temp == 0) {
-            buffer[i++] = '0';
-        } else {
-            char digits[12];
-            int j = 0;
-            while (temp > 0) {
-                digits[j++] = '0' + (temp % 10);
-                temp /= 10;
-            }
-            while (j > 0) {
-                buffer[i++] = digits[--j];
-            }
-        }
-        buffer[i++] = 'h';
-        buffer[i++] = ' ';
-        buffer[i] = '\0';
-        terminal_writestring(buffer);
+        print_uint32(hours);
+        terminal_writestring("h ");
     }
-    
     if (minutes > 0 || hours > 0 || days > 0) {
-        int i = 0;
-        uint32_t temp = minutes;
-        if (temp == 0) {
-            buffer[i++] = '0';
-        } else {
-            char digits[12];
-            int j = 0;
-            while (temp > 0) {
-                digits[j++] = '0' + (temp % 10);
-                temp /= 10;
-            }
-            while (j > 0) {
-                buffer[i++] = digits[--j];
-            }
-        }
-        buffer[i++] = 'm';
-        buffer[i++] = ' ';
-        buffer[i] = '\0';
-        terminal_writestring(buffer);
+        print_uint32(minutes);
+        terminal_writestring("m ");
     }
-    
-    int i = 0;
-    uint32_t temp = seconds;
-    if (temp == 0) {
-        buffer[i++] = '0';
-    } else {
-        char digits[12];
-        int j = 0;
-        while (temp > 0) {
-            digits[j++] = '0' + (temp % 10);
-            temp /= 10;
-        }
-        while (j > 0) {
-            buffer[i++] = digits[--j];
-        }
-    }
-    buffer[i++] = 's';
-    buffer[i] = '\0';
-    terminal_writestring(buffer);
+    print_uint32(seconds);
+    terminal_writestring("s");
     
     terminal_setcolor(label_color);
     terminal_writestring("\n");
@@ -502,26 +376,8 @@ void cmd_sysinfo(void) {
     terminal_writestring("Uptime: ");
     terminal_setcolor(value_color);
 
-    char buffer[32];
-    int i = 0;
-    uint32_t temp = seconds;
-    if (temp == 0) {
-        buffer[i++] = '0';
-    } else {
-        char digits[12];
-        int j = 0;
-        while (temp > 0) {
-            digits[j++] = '0' + (temp % 10);
-            temp /= 10;
-        }
-        while (j > 0) {
-            buffer[i++] = digits[--j];
-        }
-    }
-    buffer[i++] = 's';
-    buffer[i] = '\0';
-    terminal_writestring(buffer);
-    terminal_writestring("\n");
+    print_uint32(seconds);
+    terminal_writestring("s\n");
 
     // Disk space
     uint32_t total_kb, used_kb, free_kb;
@@ -530,34 +386,23 @@ void cmd_sysinfo(void) {
     if (total_kb > 0) {
         uint8_t warn_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
 
-        // Helper lambda-like macro to print a uint32 KB value
-        #define PRINT_KB(val) do { \
-            uint32_t _v = (val); \
-            char _d[12]; int _j = 0; \
-            if (_v == 0) { terminal_putchar('0'); } \
-            else { while (_v > 0) { _d[_j++] = '0' + (_v % 10); _v /= 10; } \
-                   while (_j > 0) terminal_putchar(_d[--_j]); } \
-            terminal_writestring(" KB"); \
-        } while(0)
-
         terminal_setcolor(label_color);
         terminal_writestring("Disk:   ");
         terminal_setcolor(value_color);
-        PRINT_KB(total_kb);
-        terminal_writestring(" total  ");
+        print_uint32(total_kb);
+        terminal_writestring(" KB total  ");
 
         terminal_setcolor(value_color);
-        PRINT_KB(used_kb);
-        terminal_writestring(" used  ");
+        print_uint32(used_kb);
+        terminal_writestring(" KB used  ");
 
-        // Free in a different color if low (<10%)
         if (free_kb * 10 < total_kb) {
             terminal_setcolor(warn_color);
         } else {
             terminal_setcolor(value_color);
         }
-        PRINT_KB(free_kb);
-        terminal_writestring(" free\n");
+        print_uint32(free_kb);
+        terminal_writestring(" KB free\n");
 
         // Usage bar [##########..........] 20 chars
         terminal_setcolor(label_color);
@@ -575,20 +420,10 @@ void cmd_sysinfo(void) {
         terminal_setcolor(label_color);
         terminal_writestring("] ");
 
-        // Percentage
         uint32_t pct = (total_kb > 0) ? ((used_kb * 100) / total_kb) : 0;
-        char pct_buf[8]; int pi = 0;
-        if (pct == 0) { pct_buf[pi++] = '0'; }
-        else { char pd[4]; int pj = 0;
-               uint32_t pv = pct;
-               while (pv > 0) { pd[pj++] = '0' + (pv % 10); pv /= 10; }
-               while (pj > 0) pct_buf[pi++] = pd[--pj]; }
-        pct_buf[pi++] = '%'; pct_buf[pi] = '\0';
         terminal_setcolor(value_color);
-        terminal_writestring(pct_buf);
-        terminal_writestring("\n");
-
-        #undef PRINT_KB
+        print_uint32(pct);
+        terminal_writestring("%\n");
     } else {
         terminal_setcolor(label_color);
         terminal_writestring("Disk:   N/A (ramfs)\n");
@@ -750,27 +585,7 @@ void cmd_ls(void) {
             
             terminal_setcolor(size_color);
             terminal_writestring(" (");
-            
-            char size_str[16];
-            uint32_t size = files[i].size;
-            int idx = 0;
-            
-            if (size == 0) {
-                size_str[idx++] = '0';
-            } else {
-                char temp[16];
-                int t = 0;
-                while (size > 0) {
-                    temp[t++] = '0' + (size % 10);
-                    size /= 10;
-                }
-                while (t > 0) {
-                    size_str[idx++] = temp[--t];
-                }
-            }
-            size_str[idx] = '\0';
-            
-            terminal_writestring(size_str);
+            print_uint32(files[i].size);
             terminal_writestring(" bytes)\n");
         }
     }
@@ -1168,7 +983,7 @@ void cmd_which(const char* args) {
         "touch","mkdir","rmdir","cd","pwd","mem","uptime","color",
         "reboot","shutdown","cp","mv","rename","which","tree",
         "date","hexdump","wc","head","sleep","history","neofetch","calc",
-        "divan", 0
+        "ps","kill","divan", 0
     };
 
     for (int i = 0; builtins[i]; i++) {
@@ -1203,7 +1018,6 @@ void cmd_which(const char* args) {
     terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
 }
 
-// Helper to print uint32 without libc
 static void print_uint32(uint32_t n) {
     char tmp[12];
     int t = 0;
@@ -1752,15 +1566,7 @@ void cmd_calc(const char* args) {
         terminal_putchar('-');
         result = -result;
     }
-    if (result == 0) {
-        terminal_putchar('0');
-    } else {
-        char digits[20];
-        int d = 0;
-        long tmp = result;
-        while (tmp > 0) { digits[d++] = '0' + (int)(tmp % 10); tmp /= 10; }
-        while (d > 0) terminal_putchar(digits[--d]);
-    }
+    print_uint32((uint32_t)result);
 
     terminal_setcolor(lbl);
     terminal_writestring("\n");

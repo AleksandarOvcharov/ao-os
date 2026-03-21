@@ -22,30 +22,21 @@ void fs_init(void) {
 
 int fs_create(const char* name, const char* data, uint32_t size) {
     if (use_fat12) {
-        int result = fat12_create(name, data, size);
-        if (result == -1) {
-            return ramfs_create(name, data, size);
-        }
-        return result;
+        return fat12_create(name, data, size);
     }
     return ramfs_create(name, data, size);
 }
 
 int fs_read(const char* name, char* buffer, uint32_t* size) {
     if (use_fat12) {
-        int result = fat12_read(name, buffer, size);
-        if (result == 0) return 0;
+        return fat12_read(name, buffer, size);
     }
     return ramfs_read(name, buffer, size);
 }
 
 int fs_delete(const char* name) {
     if (use_fat12) {
-        int result = fat12_delete(name);
-        if (result == -1) {
-            return ramfs_delete(name);
-        }
-        return result;
+        return fat12_delete(name);
     }
     return ramfs_delete(name);
 }

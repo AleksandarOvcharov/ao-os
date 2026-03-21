@@ -111,9 +111,12 @@ isr_common_stub:
 ; ─── IRQ Handlers ────────────────────────────────────────────────────────────
 
 ; Timer interrupt handler (IRQ0 - mapped to INT 32)
-extern timer_tick
+; Saves full CPU context for process scheduling and context switching.
+; schedule_tick() may return a different stack pointer (context switch).
+extern schedule_tick
 global irq0_handler
 irq0_handler:
+    ; Save all general-purpose registers (must match cpu_context_t layout)
     push rax
     push rbx
     push rcx
@@ -125,13 +128,28 @@ irq0_handler:
     push r9
     push r10
     push r11
+    push r12
+    push r13
+    push r14
+    push r15
 
-    call timer_tick
+    ; Call scheduler with current stack pointer
+    mov rdi, rsp
+    call schedule_tick
+
+    ; Switch to returned stack pointer FIRST (before EOI clobbers AL)
+    mov rsp, rax
 
     ; Send EOI to master PIC
+    ; (clobbers AL, but pop rax below restores it from the stack)
     mov al, 0x20
     out 0x20, al
 
+    ; Restore registers (potentially from a different process)
+    pop r15
+    pop r14
+    pop r13
+    pop r12
     pop r11
     pop r10
     pop r9
