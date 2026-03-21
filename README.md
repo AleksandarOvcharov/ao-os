@@ -83,13 +83,22 @@ ao-os/
 │   ├── panic.c        # Kernel panic (red screen)
 │   ├── cpu.c          # CPUID detection
 │   ├── syscall.c      # Syscall dispatcher
-│   ├── drivers/       # Device drivers
-│   │   ├── vga.c      # VGA text mode driver with scrollback
-│   │   ├── keyboard.c # PS/2 keyboard (IRQ1 interrupt-driven)
-│   │   ├── timer.c    # PIT timer driver (100 Hz)
-│   │   ├── serial.c   # COM1 serial console
-│   │   ├── ata.c      # ATA PIO disk driver
-│   │   └── rtc.c      # Real-time clock
+│   ├── drivers/       # Device drivers (organized by subsystem)
+│   │   ├── display/   # VGA/terminal display
+│   │   │   ├── vga.c          # VGA hardware: color, cursor, rendering
+│   │   │   ├── terminal.c     # Terminal buffer: text output, scrolling
+│   │   │   └── display_internal.h  # Shared state between vga/terminal
+│   │   ├── input/     # Keyboard input
+│   │   │   ├── keyboard.c     # IRQ1 handler, ring buffer, getchar
+│   │   │   ├── scancode.c     # PS/2 scancode tables and translation
+│   │   │   └── scancode.h     # Internal scancode API
+│   │   ├── storage/   # Disk I/O
+│   │   │   └── ata.c          # ATA PIO driver with timeout protection
+│   │   ├── serial/    # Serial communication
+│   │   │   └── serial.c       # COM1 serial port driver
+│   │   └── time/      # Timing and clock
+│   │       ├── timer.c        # PIT timer driver (100 Hz)
+│   │       └── rtc.c          # CMOS real-time clock
 │   ├── fs/            # Filesystem
 │   │   ├── fs.c       # Filesystem abstraction layer
 │   │   ├── fat12.c    # FAT12 with subdirectory support

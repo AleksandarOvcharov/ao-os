@@ -1,6 +1,6 @@
 # AO OS Features
 
-## AO-OS Features (v2.0.0 - Nova)
+## AO-OS Features (v2.0.0 - Nebula)
 
 ### Core System
 - **Custom 2-Stage Bootloader**: Replaces GRUB, full control over boot sequence
@@ -228,12 +228,14 @@
 
 ### Code Organization
 - **Modular Structure**: Separated into logical components
-  - Drivers (VGA, Keyboard)
-  - Libraries (String utilities)
-  - Shell (Command parsing and execution)
+  - Drivers organized by subsystem: display/, input/, storage/, serial/, time/
+  - Display split into VGA hardware (vga.c) and terminal buffer (terminal.c)
+  - Keyboard split into IRQ handler (keyboard.c) and scancode tables (scancode.c)
+  - Filesystem: fs/, Memory management: memory/, Process management: process/
+  - Libraries (String utilities), Shell (Command parsing and execution)
   - System (Hardware control, Panic handler)
-- **Header Files**: Clean API separation
-- **Build System**: Automated build with Makefile
+- **Header Files**: Public API in include/, internal headers within driver subdirectories
+- **Build System**: Automated build with Makefile, auto-generated header dependencies (-MMD -MP)
 - **Error Handling**: Kernel panic system for fatal errors
 
 ## Planned Features

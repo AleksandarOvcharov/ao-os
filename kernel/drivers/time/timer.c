@@ -9,9 +9,9 @@ static void timer_handler(void) {
 
 void timer_phase(uint32_t hz) {
     uint32_t divisor = PIT_FREQUENCY / hz;
-    
+
     outb(0x43, 0x36);
-    
+
     outb(0x40, (uint8_t)(divisor & 0xFF));
     outb(0x40, (uint8_t)((divisor >> 8) & 0xFF));
 }

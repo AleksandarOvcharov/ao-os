@@ -187,7 +187,7 @@ static int installer_create_welcome_files(void) {
     root_sector[43] = 0x20;  // Archive attribute
     *(uint16_t*)&root_sector[58] = 3;  // First cluster
     
-    const char* readme_msg = "AO OS - A simple operating system\r\n\r\nVersion: 0.7.0\r\nCodename: Aurora\r\n\r\nFeatures:\r\n- FAT12 filesystem\r\n- Text editor\r\n- Shell commands\r\n- Disk installer\r\n";
+    const char* readme_msg = "AO OS - A simple operating system\r\n\r\nVersion: 0.7.0\r\nCodename: Nebula\r\n\r\nFeatures:\r\n- FAT12 filesystem\r\n- Text editor\r\n- Shell commands\r\n- Disk installer\r\n";
     uint32_t readme_len = 0;
     while (readme_msg[readme_len]) readme_len++;
     *(uint32_t*)&root_sector[60] = readme_len;

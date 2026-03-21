@@ -704,7 +704,7 @@ KERNEL_SECS  equ 256
 
 str_hdr:      db "AO OS  Bootloader", 0
 str_os:       db "AO  OS", 0
-str_tag:      db "v2.0.0  -  Nova", 0
+str_tag:      db "v2.0.0  -  Nebula", 0
 str_prompt:   db "Please select a boot option:", 0
 str_opt0:     db "Boot AO OS normally", 0
 str_opt1:     db "Reinstall  /  Format disk", 0

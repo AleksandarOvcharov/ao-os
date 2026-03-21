@@ -7,6 +7,7 @@ LD = x86_64-elf-gcc
 ASFLAGS_ELF = -f elf64
 ASFLAGS_BIN = -f bin
 CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Iinclude \
+          -I$(KERNEL_DIR)/drivers/include \
           -mno-red-zone -mcmodel=kernel -mno-sse -mno-mmx -mno-sse2 \
           -MMD -MP
 LDFLAGS = -T linker.ld -ffreestanding -O2 -nostdlib -lgcc
@@ -18,6 +19,7 @@ BUILD_DIR      = build
 BOOT_DIR       = boot
 BOOTLOADER_DIR = bootloader
 KERNEL_DIR     = kernel
+DRIVERS_DIR    = $(KERNEL_DIR)/drivers
 
 # Output — raw bootable disk image named .iso for familiarity
 ISO_FILE = ao-os.iso
@@ -26,7 +28,9 @@ BOOT_OBJ = $(BUILD_DIR)/boot.o $(BUILD_DIR)/interrupt.o $(BUILD_DIR)/gdt_asm.o
 KERNEL_OBJS = \
     $(BUILD_DIR)/kernel.o \
     $(BUILD_DIR)/vga.o \
+    $(BUILD_DIR)/terminal.o \
     $(BUILD_DIR)/keyboard.o \
+    $(BUILD_DIR)/scancode.o \
     $(BUILD_DIR)/string.o \
     $(BUILD_DIR)/shell.o \
     $(BUILD_DIR)/commands.o \
@@ -89,11 +93,41 @@ $(BUILD_DIR)/gdt_asm.o: $(BOOT_DIR)/gdt.asm | $(BUILD_DIR)
 $(BUILD_DIR)/kernel.o: $(KERNEL_DIR)/kernel.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/vga.o: $(KERNEL_DIR)/drivers/vga.c | $(BUILD_DIR)
+# ── Display driver ─────────────────────────────────────────────────────────
+
+$(BUILD_DIR)/vga.o: $(DRIVERS_DIR)/display/vga.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/keyboard.o: $(KERNEL_DIR)/drivers/keyboard.c | $(BUILD_DIR)
+$(BUILD_DIR)/terminal.o: $(DRIVERS_DIR)/display/terminal.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
+
+# ── Input driver ───────────────────────────────────────────────────────────
+
+$(BUILD_DIR)/keyboard.o: $(DRIVERS_DIR)/input/keyboard.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/scancode.o: $(DRIVERS_DIR)/input/scancode.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ── Storage driver ─────────────────────────────────────────────────────────
+
+$(BUILD_DIR)/ata.o: $(DRIVERS_DIR)/storage/ata.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ── Serial driver ──────────────────────────────────────────────────────────
+
+$(BUILD_DIR)/serial.o: $(DRIVERS_DIR)/serial/serial.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ── Time drivers ───────────────────────────────────────────────────────────
+
+$(BUILD_DIR)/timer.o: $(DRIVERS_DIR)/time/timer.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/rtc.o: $(DRIVERS_DIR)/time/rtc.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# ── Kernel subsystems ─────────────────────────────────────────────────────
 
 $(BUILD_DIR)/string.o: $(KERNEL_DIR)/lib/string.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -119,19 +153,10 @@ $(BUILD_DIR)/memory.o: $(KERNEL_DIR)/memory/memory.c | $(BUILD_DIR)
 $(BUILD_DIR)/idt.o: $(KERNEL_DIR)/idt.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/timer.o: $(KERNEL_DIR)/drivers/timer.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
 $(BUILD_DIR)/cpu.o: $(KERNEL_DIR)/cpu.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/klog.o: $(KERNEL_DIR)/klog.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/serial.o: $(KERNEL_DIR)/drivers/serial.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/ata.o: $(KERNEL_DIR)/drivers/ata.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/ramfs.o: $(KERNEL_DIR)/fs/ramfs.c | $(BUILD_DIR)
@@ -153,9 +178,6 @@ $(BUILD_DIR)/aob.o: $(KERNEL_DIR)/aob/aob.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/syscall.o: $(KERNEL_DIR)/syscall.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -c $< -o $@
-
-$(BUILD_DIR)/rtc.o: $(KERNEL_DIR)/drivers/rtc.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/exception.o: $(KERNEL_DIR)/exception.c | $(BUILD_DIR)
