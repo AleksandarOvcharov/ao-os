@@ -65,7 +65,7 @@ STAGE1_BIN  = $(BUILD_DIR)/stage1.bin
 STAGE2_BIN  = $(BUILD_DIR)/stage2.bin
 DISK_IMG    = $(BUILD_DIR)/ao-os.img
 
-.PHONY: all clean run run-disk iso
+.PHONY: all clean run run-disk iso test-fat
 
 all: iso
 
@@ -243,6 +243,9 @@ run-disk: iso floppy.img
 	qemu-system-x86_64 -drive file=$(ISO_FILE),format=raw,index=0,media=disk \
 	                    -drive file=floppy.img,format=raw,if=ide \
 	                    -serial stdio -m 32
+
+test-fat:
+	sh tools/tests/test-fat.sh
 
 clean:
 	rm -rf $(BUILD_DIR) $(ISO_FILE) floppy.img

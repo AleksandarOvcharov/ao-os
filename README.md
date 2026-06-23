@@ -40,6 +40,7 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 make          # Build the OS
 make run      # Run in QEMU (with serial console output)
 make run-disk # Run with a second FAT12 floppy disk
+make test-fat # FAT12/16/32 boundary, multi-cluster, reuse and corruption tests
 make clean    # Clean build files
 ```
 

@@ -30,6 +30,7 @@ static fat_bpb_t bpb;
 static fat_type_t type;
 static uint32_t total_sectors, fat_size, root_sectors, first_data;
 static uint32_t cluster_count, root_cluster, current_cluster;
+static uint16_t fsinfo_sector, backup_boot_sector;
 static uint8_t mounted_drive;
 static char cwd[FS_MAX_FILENAME] = "/";
 static fs_file_info_t file_list[MAX_DIR_ENTRIES];
@@ -51,6 +52,23 @@ static uint32_t eoc_value(void) {
 
 static int is_eoc(uint32_t c) {
     return c >= (type == FAT_TYPE_12 ? 0xFF8 : (type == FAT_TYPE_16 ? 0xFFF8 : 0x0FFFFFF8));
+}
+
+static int valid_data_cluster(uint32_t c) {
+    return c >= 2 && c < cluster_count + 2;
+}
+
+static uint32_t fat_get(uint32_t cluster);
+
+/* Advance a corruption-check cursor. EOC is a normal terminal state; zero,
+   reserved/bad values and references outside the data area are invalid. */
+static int checked_next(uint32_t c, uint32_t* next, int* terminal) {
+    uint32_t value;
+    if (!valid_data_cluster(c)) return -1;
+    value = fat_get(c);
+    if (is_eoc(value)) { *terminal = 1; *next = value; return 0; }
+    if (!valid_data_cluster(value)) return -1;
+    *terminal = 0; *next = value; return 0;
 }
 
 static uint32_t cluster_sector(uint32_t c) {
@@ -111,6 +129,25 @@ static int fat_set(uint32_t cluster, uint32_t value) {
     return 0;
 }
 
+static void fsinfo_adjust_sector(uint32_t sector, int delta, uint32_t next_free) {
+    uint8_t data[SECTOR_SIZE];
+    uint32_t free_count;
+    if (type != FAT_TYPE_32 || sector >= bpb.reserved_sectors || ata_read_sector(sector, data) != 0) return;
+    if (*(uint32_t*)&data[0] != 0x41615252 || *(uint32_t*)&data[484] != 0x61417272 ||
+        *(uint32_t*)&data[508] != 0xAA550000) return;
+    free_count = *(uint32_t*)&data[488];
+    if (free_count != 0xFFFFFFFF) *(uint32_t*)&data[488] = free_count + delta;
+    *(uint32_t*)&data[492] = next_free < cluster_count + 2 ? next_free : 2;
+    ata_write_sector(sector, data);
+}
+
+static void fsinfo_adjust(int delta, uint32_t next_free) {
+    if (type != FAT_TYPE_32 || fsinfo_sector == 0 || fsinfo_sector == 0xFFFF) return;
+    fsinfo_adjust_sector(fsinfo_sector, delta, next_free);
+    if (backup_boot_sector != 0 && backup_boot_sector != 0xFFFF)
+        fsinfo_adjust_sector((uint32_t)backup_boot_sector + 1, delta, next_free);
+}
+
 static uint32_t alloc_cluster(void) {
     uint8_t zero[SECTOR_SIZE]; memset(zero, 0, sizeof(zero));
     for (uint32_t c = 2; c < cluster_count + 2; c++) {
@@ -118,6 +155,7 @@ static uint32_t alloc_cluster(void) {
             if (fat_set(c, eoc_value()) != 0) return 0;
             for (uint32_t s = 0; s < bpb.sectors_per_cluster; s++)
                 if (ata_write_sector(cluster_sector(c) + s, zero) != 0) return 0;
+            fsinfo_adjust(-1, c + 1);
             return c;
         }
     }
@@ -128,6 +166,7 @@ static void free_chain(uint32_t c) {
     while (c >= 2 && c < cluster_count + 2) {
         uint32_t next = fat_get(c);
         fat_set(c, 0);
+        fsinfo_adjust(1, c);
         if (is_eoc(next) || next < 2) break;
         c = next;
     }
@@ -226,6 +265,8 @@ static int mount_drive(int drive) {
     cluster_count = (total_sectors - first_data) / bpb.sectors_per_cluster;
     type = cluster_count < 4085 ? FAT_TYPE_12 : (cluster_count < 65525 ? FAT_TYPE_16 : FAT_TYPE_32);
     root_cluster = type == FAT_TYPE_32 ? (*(uint32_t*)&sector[44] & 0x0FFFFFFF) : 0;
+    fsinfo_sector = type == FAT_TYPE_32 ? *(uint16_t*)&sector[48] : 0;
+    backup_boot_sector = type == FAT_TYPE_32 ? *(uint16_t*)&sector[50] : 0;
     if (type == FAT_TYPE_32 && root_cluster < 2) return -1;
     current_cluster = type == FAT_TYPE_32 ? root_cluster : 0;
     mounted_drive = (uint8_t)drive; cwd[0] = '/'; cwd[1] = 0; return 0;
@@ -245,13 +286,27 @@ fat_type_t fat_get_type(void) { return type; }
 int fat_read(const char* name, char* buffer, uint32_t* size) {
     fat_dir_entry_t e; if (!fat_available() || find_entry(current_cluster, name, &e, 0) || (e.attr & ATTR_DIRECTORY)) return -1;
     uint32_t c = entry_cluster(&e), done = 0;
-    while (done < e.size && c >= 2 && !is_eoc(c)) {
+    uint32_t cycle_anchor = c, cycle_power = 1, cycle_length = 0;
+    while (done < e.size) {
+        if (!valid_data_cluster(c)) { *size = done; return -1; }
         for (uint32_t s = 0; s < bpb.sectors_per_cluster && done < e.size; s++) {
             uint8_t sec[SECTOR_SIZE]; if (ata_read_sector(cluster_sector(c) + s, sec) != 0) return -1;
             uint32_t n = e.size - done; if (n > SECTOR_SIZE) n = SECTOR_SIZE;
             memcpy(buffer + done, sec, n); done += n;
         }
-        c = fat_get(c);
+        if (done < e.size) {
+            uint32_t next;
+            int terminal;
+            if (checked_next(c, &next, &terminal) != 0 || terminal) { *size = done; return -1; }
+            c = next;
+            cycle_length++;
+            if (c == cycle_anchor) { *size = done; return -1; }
+            if (cycle_length == cycle_power) {
+                cycle_anchor = c;
+                cycle_power <<= 1;
+                cycle_length = 0;
+            }
+        }
     }
     *size = done; return done == e.size ? 0 : -1;
 }
