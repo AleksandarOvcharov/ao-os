@@ -13,7 +13,7 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - **Enhanced CPUID**: Brand string, feature flags (SSE, AVX, NX...), family/model/stepping
 - **VGA Text Mode**: 80x25 color text display with 1000-line scrollback (PageUp/PageDown)
 - **Interrupt-Driven Keyboard**: PS/2 keyboard via IRQ1 with ring buffer (no polling)
-- **FAT12 Filesystem**: Full read/write with subdirectory support
+- **FAT12/FAT16/FAT32 Filesystems**: Auto-detected, persistent read/write storage with subdirectory support
 - **AOB Executable Format**: Custom binary format for user programs with syscall API
 - **40+ Shell Commands**: File operations, directory navigation, text editor, system tools, process management (`ps`, `kill`)
 - **Interactive Shell**: Command history, colored prompts, working directory display
@@ -42,6 +42,10 @@ make run      # Run in QEMU (with serial console output)
 make run-disk # Run with a second FAT12 floppy disk
 make clean    # Clean build files
 ```
+
+The installer offers FAT12, FAT16, and FAT32. FAT16 is the default recommendation;
+FAT32 requires a disk large enough to contain at least 65,525 data clusters. The
+development image is 64 MiB so every installer option produces a valid FAT type.
 
 ### Debugging
 
@@ -101,7 +105,8 @@ ao-os/
 │   │       └── rtc.c          # CMOS real-time clock
 │   ├── fs/            # Filesystem
 │   │   ├── fs.c       # Filesystem abstraction layer
-│   │   ├── fat12.c    # FAT12 with subdirectory support
+│   │   ├── fat.c      # Shared FAT12/FAT16/FAT32 implementation
+│   │   ├── fat12.c    # Legacy FAT12 implementation
 │   │   └── ramfs.c    # RAM filesystem fallback
 │   ├── memory/        # Memory management
 │   │   ├── pmm.c      # Physical page frame allocator (bitmap, E820)
@@ -179,7 +184,7 @@ AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
 
 - Single user process at a time (shared virtual address space at 0x200000)
 - No per-process page tables (all processes share the kernel page table)
-- FAT12 filesystem without caching or permissions
+- FAT filesystems use 8.3 names and have no permissions
 - No networking support
 - AOB executable format without dynamic linking or arguments passing to ring 3
 - No inter-process communication (IPC)
@@ -190,7 +195,7 @@ AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
 - [ ] Per-process page tables (memory isolation between processes)
 - [ ] True concurrent multitasking (multiple user processes with separate address spaces)
 - [ ] Improved executable format (ELF support, dynamic linking)
-- [ ] FAT12 write optimizations and sector caching
+- [ ] FAT write optimizations, long-name creation, and sector caching
 - [ ] Graphics mode (VESA framebuffer)
 - [ ] Networking stack (NE2000/virtio-net)
 - [ ] IPC mechanisms (pipes, shared memory)

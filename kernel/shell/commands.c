@@ -746,7 +746,7 @@ void cmd_checkfs(void) {
     terminal_setcolor(value_color);
     
     const char* fs_type = fs_get_type();
-    if (strcmp(fs_type, "FAT12") == 0) {
+    if (strncmp(fs_type, "FAT", 3) == 0) {
         terminal_writestring("Persistent storage (disk-backed)\n");
     } else {
         terminal_writestring("Volatile storage (RAM-backed)\n");

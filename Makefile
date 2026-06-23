@@ -3,14 +3,15 @@
 AS = nasm
 CC = x86_64-elf-gcc
 LD = x86_64-elf-gcc
+OBJCOPY = x86_64-elf-objcopy
 
 ASFLAGS_ELF = -f elf64
 ASFLAGS_BIN = -f bin
 CFLAGS  = -std=gnu99 -ffreestanding -O2 -Wall -Wextra -Iinclude \
           -I$(KERNEL_DIR)/drivers/include \
           -mno-red-zone -mcmodel=kernel -mno-sse -mno-mmx -mno-sse2 \
-          -MMD -MP
-LDFLAGS = -T linker.ld -ffreestanding -O2 -nostdlib -lgcc
+          -fno-pie -MMD -MP
+LDFLAGS = -T linker.ld -ffreestanding -O2 -nostdlib -no-pie -lgcc
 
 # Pull in auto-generated header dependencies
 -include $(BUILD_DIR)/*.d
@@ -45,7 +46,7 @@ KERNEL_OBJS = \
     $(BUILD_DIR)/serial.o \
     $(BUILD_DIR)/ata.o \
     $(BUILD_DIR)/ramfs.o \
-    $(BUILD_DIR)/fat12.o \
+    $(BUILD_DIR)/fat.o \
     $(BUILD_DIR)/fs.o \
     $(BUILD_DIR)/editor.o \
     $(BUILD_DIR)/installer.o \
@@ -165,6 +166,9 @@ $(BUILD_DIR)/ramfs.o: $(KERNEL_DIR)/fs/ramfs.c | $(BUILD_DIR)
 $(BUILD_DIR)/fat12.o: $(KERNEL_DIR)/fs/fat12.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/fat.o: $(KERNEL_DIR)/fs/fat.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/fs.o: $(KERNEL_DIR)/fs/fs.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -201,7 +205,7 @@ $(KERNEL_ELF): $(BOOT_OBJ) $(KERNEL_OBJS)
 	$(LD) $(LDFLAGS) -o $@ $^
 
 $(KERNEL_BIN): $(KERNEL_ELF)
-	x86_64-elf-objcopy -O binary $< $@
+	$(OBJCOPY) -O binary $< $@
 
 # ── Assemble disk image ────────────────────────────────────────────────────
 # Layout:
@@ -212,7 +216,7 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 $(DISK_IMG): $(STAGE1_BIN) $(STAGE2_BIN) $(KERNEL_BIN) | $(BUILD_DIR)
 	@KSECS=$$(( ($$(wc -c < $(KERNEL_BIN)) + 511) / 512 )); \
 	 echo "Kernel: $$KSECS sectors ($$(wc -c < $(KERNEL_BIN)) bytes)"
-	dd if=/dev/zero of=$@ bs=512 count=2880 2>/dev/null
+	dd if=/dev/zero of=$@ bs=512 count=131072 2>/dev/null
 	dd if=$(STAGE1_BIN) of=$@ bs=512 seek=0 conv=notrunc 2>/dev/null
 	dd if=$(STAGE2_BIN) of=$@ bs=512 seek=1 conv=notrunc 2>/dev/null
 	dd if=$(KERNEL_BIN) of=$@ bs=512 seek=5 conv=notrunc 2>/dev/null

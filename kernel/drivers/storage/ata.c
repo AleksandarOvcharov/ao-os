@@ -3,9 +3,10 @@
 #include "klog.h"
 
 static int ata_available = 0;
+static uint32_t ata_sector_count = 0;
 static uint8_t ata_drive_select = 0xE0; /* 0xE0=master, 0xF0=slave */
 
-#define ATA_TIMEOUT 100000
+#define ATA_TIMEOUT 1000000
 
 static int ata_wait_bsy(void) {
     for (int i = 0; i < ATA_TIMEOUT; i++) {
@@ -39,6 +40,20 @@ void ata_init(void) {
         return;
     }
 
+    /* IDENTIFY gives the formatter the actual LBA28 capacity. */
+    outb(ATA_REG_DRIVE, 0xA0);
+    outb(ATA_REG_SECCOUNT, 0);
+    outb(ATA_REG_LBA_LOW, 0);
+    outb(ATA_REG_LBA_MID, 0);
+    outb(ATA_REG_LBA_HIGH, 0);
+    outb(ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+    if (ata_wait_bsy() == 0 && ata_wait_drq() == 0) {
+        for (int i = 0; i < 256; i++) {
+            uint16_t word = inw(ATA_REG_DATA);
+            if (i == 60) ata_sector_count = word;
+            if (i == 61) ata_sector_count |= (uint32_t)word << 16;
+        }
+    }
     ata_available = 1;
     klog_info("ATA driver initialized");
 }
@@ -46,6 +61,8 @@ void ata_init(void) {
 int ata_is_available(void) {
     return ata_available;
 }
+
+uint32_t ata_get_sector_count(void) { return ata_sector_count; }
 
 void ata_select_drive(int slave) {
     ata_drive_select = slave ? 0xF0 : 0xE0;

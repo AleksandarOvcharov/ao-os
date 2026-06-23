@@ -31,5 +31,6 @@ void ata_select_drive(int slave);
 int ata_read_sector(uint32_t lba, uint8_t* buffer);
 int ata_write_sector(uint32_t lba, uint8_t* buffer);
 int ata_is_available(void);
+uint32_t ata_get_sector_count(void);
 
 #endif

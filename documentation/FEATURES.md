@@ -120,8 +120,9 @@
   - Decouples applications from filesystem implementations
   - Automatic filesystem detection
   - Clean architecture for multiple filesystem support
-- **FAT12 Filesystem**:
-  - Full read/write support for FAT12-formatted disks
+- **FAT Filesystems**:
+  - Full read/write support for FAT12, FAT16, and FAT32-formatted disks
+  - BPB-based type detection and FAT32 cluster-chain root directories
   - **Complete subdirectory support** - create and navigate directory trees
   - Boot sector and BPB parsing
   - FAT table and cluster chain navigation

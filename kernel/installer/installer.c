@@ -1,390 +1,202 @@
 #include "installer.h"
 #include "ata.h"
 #include "vga.h"
+#include "keyboard.h"
 #include "string.h"
 #include "klog.h"
 
-static uint8_t sector_buffer[512];
+#define SECTOR_SIZE 512
+#define BOOT_RESERVED_SECTORS 512 /* stage2 and the raw kernel live here */
+
+static uint8_t sector_buffer[SECTOR_SIZE];
+static installer_fs_t selected_fs = INSTALLER_FS_FAT16;
+static uint32_t volume_sectors, reserved_sectors, fat_sectors, root_sectors;
+static uint32_t first_data_sector, root_cluster;
+static uint8_t sectors_per_cluster;
+static uint16_t root_entries;
+
+static void put16(uint8_t* p, uint16_t v) { p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); }
+static void put32(uint8_t* p, uint32_t v) { p[0]=(uint8_t)v; p[1]=(uint8_t)(v>>8); p[2]=(uint8_t)(v>>16); p[3]=(uint8_t)(v>>24); }
+
+static int write_zero(uint32_t lba) {
+    memset(sector_buffer, 0, sizeof(sector_buffer));
+    return ata_write_sector(lba, sector_buffer) == 0 ? INSTALLER_OK : INSTALLER_WRITE_ERROR;
+}
 
 int installer_detect_disk(void) {
-    terminal_writestring("Detecting disk...\n");
-    
-    if (!ata_is_available()) {
-        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-        terminal_setcolor(error_color);
-        terminal_writestring("ERROR: No ATA disk detected\n");
-        uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-        terminal_setcolor(normal_color);
+    ata_select_drive(0);
+    terminal_writestring("Detecting primary ATA disk...\n");
+    if (!ata_is_available() || ata_get_sector_count() == 0) {
+        terminal_writestring("ERROR: No usable ATA disk detected\n");
         return INSTALLER_NO_DISK;
     }
-    
-    uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    terminal_setcolor(success_color);
-    terminal_writestring("Disk found\n");
-    
-    uint8_t info_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    terminal_setcolor(info_color);
-    terminal_writestring("Mode: ATA PIO\n");
-    
-    uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    terminal_setcolor(normal_color);
-    
+    terminal_writestring("Disk found (LBA28)\n");
     return INSTALLER_OK;
 }
 
 int installer_prepare_disk(void) {
-    terminal_writestring("Preparing disk...\n");
-    terminal_writestring("Clearing first sectors...\n");
-    
-    memset(sector_buffer, 0, 512);
-    
-    for (int i = 0; i < 10; i++) {
-        if (ata_write_sector(i, sector_buffer) != 0) {
-            uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-            terminal_setcolor(error_color);
-            terminal_writestring("ERROR: Failed to clear sectors\n");
-            uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-            terminal_setcolor(normal_color);
-            return INSTALLER_WRITE_ERROR;
-        }
-    }
-    
-    uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    terminal_setcolor(success_color);
-    terminal_writestring("OK\n");
-    uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    terminal_setcolor(normal_color);
-    
+    /* Do not erase sectors 0..511: the running image's stage2 and kernel are
+       intentionally stored there and are described as FAT reserved sectors. */
+    ata_select_drive(0);
+    terminal_writestring("Preserving AO boot area... OK\n");
     return INSTALLER_OK;
 }
 
-int installer_format_filesystem(void) {
-    terminal_writestring("Formatting filesystem...\n");
-    
-    memset(sector_buffer, 0, 512);
-    
-    // Create FAT12 boot sector
-    sector_buffer[0] = 0xEB;  // JMP
-    sector_buffer[1] = 0x3C;
-    sector_buffer[2] = 0x90;  // NOP
-    
-    // OEM name
-    const char* oem = "AOOS1.0";
-    for (int i = 0; i < 8; i++) {
-        sector_buffer[3 + i] = oem[i];
+static uint32_t fat_bytes_for(installer_fs_t fs, uint32_t clusters) {
+    if (fs == INSTALLER_FS_FAT12) return ((clusters + 2) * 3 + 1) / 2;
+    if (fs == INSTALLER_FS_FAT16) return (clusters + 2) * 2;
+    return (clusters + 2) * 4;
+}
+
+static int calculate_layout(installer_fs_t fs) {
+    volume_sectors = ata_get_sector_count();
+    reserved_sectors = BOOT_RESERVED_SECTORS;
+    root_entries = fs == INSTALLER_FS_FAT32 ? 0 : (fs == INSTALLER_FS_FAT12 ? 224 : 512);
+    root_sectors = ((uint32_t)root_entries * 32 + 511) / 512;
+    sectors_per_cluster = fs == INSTALLER_FS_FAT12 ? 32 : (fs == INSTALLER_FS_FAT16 ? 2 : 1);
+    if (volume_sectors <= reserved_sectors + root_sectors + 100) return INSTALLER_UNSUPPORTED;
+
+    fat_sectors = 1;
+    for (int i=0; i<16; i++) {
+        uint32_t data = volume_sectors - reserved_sectors - root_sectors - 2 * fat_sectors;
+        uint32_t clusters = data / sectors_per_cluster;
+        uint32_t next = (fat_bytes_for(fs, clusters) + 511) / 512;
+        if (next == fat_sectors) break;
+        fat_sectors = next;
     }
-    
-    // BPB (BIOS Parameter Block)
-    *(uint16_t*)&sector_buffer[11] = 512;   // Bytes per sector
-    sector_buffer[13] = 1;                   // Sectors per cluster
-    *(uint16_t*)&sector_buffer[14] = 1;     // Reserved sectors
-    sector_buffer[16] = 2;                   // Number of FATs
-    *(uint16_t*)&sector_buffer[17] = 224;   // Root directory entries
-    *(uint16_t*)&sector_buffer[19] = 2880;  // Total sectors (1.44MB)
-    sector_buffer[21] = 0xF0;                // Media descriptor
-    *(uint16_t*)&sector_buffer[22] = 9;     // Sectors per FAT
-    *(uint16_t*)&sector_buffer[24] = 18;    // Sectors per track
-    *(uint16_t*)&sector_buffer[26] = 2;     // Number of heads
-    
-    // Boot signature
-    sector_buffer[510] = 0x55;
-    sector_buffer[511] = 0xAA;
-    
-    // Write boot sector
-    if (ata_write_sector(0, sector_buffer) != 0) {
-        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-        terminal_setcolor(error_color);
-        terminal_writestring("ERROR: Failed to write boot sector\n");
-        uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-        terminal_setcolor(normal_color);
-        return INSTALLER_WRITE_ERROR;
-    }
-    
-    // Create FAT tables
-    memset(sector_buffer, 0, 512);
-    sector_buffer[0] = 0xF0;  // Media descriptor
-    sector_buffer[1] = 0xFF;
-    sector_buffer[2] = 0xFF;
-    
-    // Write FAT1
-    for (int i = 0; i < 9; i++) {
-        if (ata_write_sector(1 + i, sector_buffer) != 0) {
-            uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-            terminal_setcolor(error_color);
-            terminal_writestring("ERROR: Failed to write FAT1\n");
-            uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-            terminal_setcolor(normal_color);
-            return INSTALLER_WRITE_ERROR;
-        }
-        memset(sector_buffer, 0, 512);
-    }
-    
-    // Write FAT2
-    sector_buffer[0] = 0xF0;
-    sector_buffer[1] = 0xFF;
-    sector_buffer[2] = 0xFF;
-    for (int i = 0; i < 9; i++) {
-        if (ata_write_sector(10 + i, sector_buffer) != 0) {
-            uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-            terminal_setcolor(error_color);
-            terminal_writestring("ERROR: Failed to write FAT2\n");
-            uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-            terminal_setcolor(normal_color);
-            return INSTALLER_WRITE_ERROR;
-        }
-        memset(sector_buffer, 0, 512);
-    }
-    
-    // Create root directory
-    memset(sector_buffer, 0, 512);
-    for (int i = 0; i < 14; i++) {
-        if (ata_write_sector(19 + i, sector_buffer) != 0) {
-            uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-            terminal_setcolor(error_color);
-            terminal_writestring("ERROR: Failed to write root directory\n");
-            uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-            terminal_setcolor(normal_color);
-            return INSTALLER_WRITE_ERROR;
-        }
-    }
-    
-    uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    terminal_setcolor(success_color);
-    terminal_writestring("OK\n");
-    uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    terminal_setcolor(normal_color);
-    
+    first_data_sector = reserved_sectors + 2 * fat_sectors + root_sectors;
+    uint32_t clusters = (volume_sectors - first_data_sector) / sectors_per_cluster;
+    if ((fs == INSTALLER_FS_FAT12 && clusters >= 4085) ||
+        (fs == INSTALLER_FS_FAT16 && (clusters < 4085 || clusters >= 65525)) ||
+        (fs == INSTALLER_FS_FAT32 && clusters < 65525)) return INSTALLER_UNSUPPORTED;
+    root_cluster = fs == INSTALLER_FS_FAT32 ? 2 : 0;
     return INSTALLER_OK;
+}
+
+static int write_boot_sector(installer_fs_t fs) {
+    /* Keep executable bytes from the current AO boot sector, replacing only
+       the standard BPB/EBPB window prepared by stage1.asm. */
+    if (ata_read_sector(0, sector_buffer) != 0) return INSTALLER_READ_ERROR;
+    sector_buffer[0]=0xEB; sector_buffer[1]=0x58; sector_buffer[2]=0x90;
+    memcpy(&sector_buffer[3], "AOOS2.0 ", 8);
+    put16(&sector_buffer[11], 512); sector_buffer[13]=sectors_per_cluster;
+    put16(&sector_buffer[14], (uint16_t)reserved_sectors); sector_buffer[16]=2;
+    put16(&sector_buffer[17], root_entries);
+    put16(&sector_buffer[19], volume_sectors < 65536 ? (uint16_t)volume_sectors : 0);
+    sector_buffer[21]=0xF8;
+    put16(&sector_buffer[22], fs == INSTALLER_FS_FAT32 ? 0 : (uint16_t)fat_sectors);
+    put16(&sector_buffer[24], 63); put16(&sector_buffer[26], 255); put32(&sector_buffer[28], 0);
+    put32(&sector_buffer[32], volume_sectors >= 65536 ? volume_sectors : 0);
+    if (fs == INSTALLER_FS_FAT32) {
+        put32(&sector_buffer[36], fat_sectors); put16(&sector_buffer[40], 0); put16(&sector_buffer[42], 0);
+        put32(&sector_buffer[44], root_cluster); put16(&sector_buffer[48], 256); put16(&sector_buffer[50], 257);
+        memset(&sector_buffer[52], 0, 12); sector_buffer[64]=0x80; sector_buffer[66]=0x29;
+        put32(&sector_buffer[67], 0xA0200032); memcpy(&sector_buffer[71], "AO OS      ", 11); memcpy(&sector_buffer[82], "FAT32   ", 8);
+    } else {
+        sector_buffer[36]=0x80; sector_buffer[38]=0x29; put32(&sector_buffer[39], fs == INSTALLER_FS_FAT16 ? 0xA0200016 : 0xA0200012);
+        memcpy(&sector_buffer[43], "AO OS      ", 11); memcpy(&sector_buffer[54], fs == INSTALLER_FS_FAT16 ? "FAT16   " : "FAT12   ", 8);
+    }
+    sector_buffer[510]=0x55; sector_buffer[511]=0xAA;
+    if (ata_write_sector(0, sector_buffer) != 0) return INSTALLER_WRITE_ERROR;
+    if (fs == INSTALLER_FS_FAT32) {
+        memset(sector_buffer, 0, sizeof(sector_buffer));
+        put32(&sector_buffer[0], 0x41615252); put32(&sector_buffer[484], 0x61417272);
+        put32(&sector_buffer[488], 0xFFFFFFFF); put32(&sector_buffer[492], 0xFFFFFFFF);
+        put32(&sector_buffer[508], 0xAA550000);
+        if (ata_write_sector(256, sector_buffer) != 0) return INSTALLER_WRITE_ERROR;
+        if (ata_read_sector(0, sector_buffer) != 0 || ata_write_sector(257, sector_buffer) != 0) return INSTALLER_WRITE_ERROR;
+        if (ata_read_sector(256, sector_buffer) != 0 || ata_write_sector(258, sector_buffer) != 0) return INSTALLER_WRITE_ERROR;
+    }
+    return INSTALLER_OK;
+}
+
+static int set_fat_entry_in_sector(installer_fs_t fs, uint8_t* sec, uint32_t cluster, uint32_t value) {
+    uint32_t offset = fs == INSTALLER_FS_FAT12 ? cluster + cluster/2 : (fs == INSTALLER_FS_FAT16 ? cluster*2 : cluster*4);
+    if (offset >= 512 || (fs == INSTALLER_FS_FAT12 && offset == 511)) return -1;
+    if (fs == INSTALLER_FS_FAT12) {
+        uint16_t old = sec[offset] | ((uint16_t)sec[offset+1]<<8);
+        old = cluster&1 ? (old&0x000F)|(value<<4) : (old&0xF000)|(value&0xFFF);
+        put16(sec+offset, old);
+    } else if (fs == INSTALLER_FS_FAT16) put16(sec+offset, (uint16_t)value);
+    else put32(sec+offset, value);
+    return 0;
+}
+
+static int initialize_fats(installer_fs_t fs) {
+    uint8_t first[512]; memset(first, 0, sizeof(first));
+    if (fs == INSTALLER_FS_FAT12) { first[0]=0xF8; first[1]=0xFF; first[2]=0xFF; }
+    else if (fs == INSTALLER_FS_FAT16) { put16(first, 0xFFF8); put16(first+2, 0xFFFF); }
+    else { put32(first, 0x0FFFFFF8); put32(first+4, 0xFFFFFFFF); put32(first+8, 0x0FFFFFFF); }
+    for (uint32_t copy=0; copy<2; copy++) {
+        uint32_t base=reserved_sectors+copy*fat_sectors;
+        for (uint32_t s=0; s<fat_sectors; s++) {
+            if (ata_write_sector(base+s, s==0 ? first : sector_buffer) != 0) return INSTALLER_WRITE_ERROR;
+            if (s==0) memset(sector_buffer, 0, sizeof(sector_buffer));
+        }
+    }
+    return INSTALLER_OK;
+}
+
+int installer_format_filesystem_as(installer_fs_t fs) {
+    ata_select_drive(0); selected_fs=fs;
+    int result=calculate_layout(fs); if (result != INSTALLER_OK) { terminal_writestring("ERROR: Disk is too small for selected FAT type\n"); return result; }
+    terminal_writestring("Writing "); terminal_writestring(fs==INSTALLER_FS_FAT12?"FAT12":(fs==INSTALLER_FS_FAT16?"FAT16":"FAT32")); terminal_writestring(" filesystem...\n");
+    if ((result=write_boot_sector(fs)) != INSTALLER_OK) return result;
+    memset(sector_buffer, 0, sizeof(sector_buffer));
+    if ((result=initialize_fats(fs)) != INSTALLER_OK) return result;
+    for (uint32_t s=0; s<root_sectors; s++) if (write_zero(reserved_sectors+2*fat_sectors+s)!=INSTALLER_OK) return INSTALLER_WRITE_ERROR;
+    if (fs==INSTALLER_FS_FAT32) for (uint32_t s=0;s<sectors_per_cluster;s++) if (write_zero(first_data_sector+s)!=INSTALLER_OK) return INSTALLER_WRITE_ERROR;
+    terminal_writestring("Filesystem formatted successfully.\n"); return INSTALLER_OK;
+}
+
+int installer_format_filesystem(void) { return installer_format_filesystem_as(selected_fs); }
+
+static void make_entry(uint8_t* e, const char* base, const char* ext, uint32_t cluster, uint32_t size) {
+    memset(e, 0, 32); memset(e, ' ', 11); memcpy(e, base, strlen(base)); memcpy(e+8, ext, strlen(ext)); e[11]=0x20;
+    put16(e+26, (uint16_t)cluster); if (selected_fs==INSTALLER_FS_FAT32) put16(e+20, (uint16_t)(cluster>>16)); put32(e+28, size);
+}
+
+static void make_volume_entry(uint8_t* e) {
+    memset(e, 0, 32); memcpy(e, "AO OS      ", 11); e[11] = 0x08;
 }
 
 static int installer_create_welcome_files(void) {
-    terminal_writestring("Creating welcome files...\n");
-    
-    uint8_t root_sector[512];
-    uint32_t root_dir_start = 19;
-    
-    // Read root directory
-    if (ata_read_sector(root_dir_start, root_sector) != 0) {
-        return INSTALLER_READ_ERROR;
+    const char* welcome="Welcome to AO OS!\r\n\r\nThe disk is formatted and ready.\r\nTry: ls, cat README.TXT, edit test.txt\r\n";
+    const char* readme="AO OS persistent storage\r\nSupported formats: FAT12, FAT16 and FAT32.\r\n";
+    uint32_t c1=selected_fs==INSTALLER_FS_FAT32?3:2, c2=c1+1;
+    uint32_t root_sector=selected_fs==INSTALLER_FS_FAT32?first_data_sector:reserved_sectors+2*fat_sectors;
+    if (ata_read_sector(root_sector, sector_buffer)!=0) return INSTALLER_READ_ERROR;
+    make_volume_entry(sector_buffer);
+    make_entry(sector_buffer+32,"WELCOME","TXT",c1,strlen(welcome));
+    make_entry(sector_buffer+64,"README","TXT",c2,strlen(readme));
+    if (ata_write_sector(root_sector,sector_buffer)!=0) return INSTALLER_WRITE_ERROR;
+    memset(sector_buffer,0,512); memcpy(sector_buffer,welcome,strlen(welcome)); if (ata_write_sector(first_data_sector+(c1-2)*sectors_per_cluster,sector_buffer)!=0) return INSTALLER_WRITE_ERROR;
+    memset(sector_buffer,0,512); memcpy(sector_buffer,readme,strlen(readme)); if (ata_write_sector(first_data_sector+(c2-2)*sectors_per_cluster,sector_buffer)!=0) return INSTALLER_WRITE_ERROR;
+    for (uint32_t copy=0;copy<2;copy++) {
+        uint32_t base=reserved_sectors+copy*fat_sectors; if (ata_read_sector(base,sector_buffer)!=0) return INSTALLER_READ_ERROR;
+        uint32_t eoc=selected_fs==INSTALLER_FS_FAT12?0xFFF:(selected_fs==INSTALLER_FS_FAT16?0xFFFF:0x0FFFFFFF);
+        set_fat_entry_in_sector(selected_fs,sector_buffer,c1,eoc); set_fat_entry_in_sector(selected_fs,sector_buffer,c2,eoc);
+        if (ata_write_sector(base,sector_buffer)!=0) return INSTALLER_WRITE_ERROR;
     }
-    
-    // Create WELCOME.TXT entry
-    memset(&root_sector[0], ' ', 11);
-    memcpy(&root_sector[0], "WELCOME ", 8);
-    memcpy(&root_sector[8], "TXT", 3);
-    root_sector[11] = 0x20;  // Archive attribute
-    *(uint16_t*)&root_sector[26] = 2;  // First cluster
-    
-    const char* welcome_msg = "Welcome to AO OS!\r\n\r\nYou have successfully installed AO OS to disk.\r\n\r\nTry these commands:\r\n  ls - List files\r\n  cat WELCOME.TXT - Read this file\r\n  edit test.txt - Create a file\r\n  help - Show all commands\r\n";
-    uint32_t welcome_len = 0;
-    while (welcome_msg[welcome_len]) welcome_len++;
-    *(uint32_t*)&root_sector[28] = welcome_len;
-    
-    // Create README.TXT entry
-    memset(&root_sector[32], ' ', 11);
-    memcpy(&root_sector[32], "README  ", 8);
-    memcpy(&root_sector[40], "TXT", 3);
-    root_sector[43] = 0x20;  // Archive attribute
-    *(uint16_t*)&root_sector[58] = 3;  // First cluster
-    
-    const char* readme_msg = "AO OS - A simple operating system\r\n\r\nVersion: 0.7.0\r\nCodename: Nebula\r\n\r\nFeatures:\r\n- FAT12 filesystem\r\n- Text editor\r\n- Shell commands\r\n- Disk installer\r\n";
-    uint32_t readme_len = 0;
-    while (readme_msg[readme_len]) readme_len++;
-    *(uint32_t*)&root_sector[60] = readme_len;
-    
-    // Write root directory
-    if (ata_write_sector(root_dir_start, root_sector) != 0) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    
-    // Write WELCOME.TXT content to cluster 2 (sector 33)
-    memset(sector_buffer, 0, 512);
-    memcpy(sector_buffer, welcome_msg, welcome_len);
-    if (ata_write_sector(33, sector_buffer) != 0) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    
-    // Write README.TXT content to cluster 3 (sector 34)
-    memset(sector_buffer, 0, 512);
-    memcpy(sector_buffer, readme_msg, readme_len);
-    if (ata_write_sector(34, sector_buffer) != 0) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    
-    // Update FAT to mark clusters as used
-    uint8_t fat_sector[512];
-    if (ata_read_sector(1, fat_sector) != 0) {
-        return INSTALLER_READ_ERROR;
-    }
-    
-    // Mark cluster 2 as EOF
-    fat_sector[3] = 0xFF;
-    fat_sector[4] = 0x0F;
-    
-    // Mark cluster 3 as EOF
-    fat_sector[4] |= 0xF0;
-    fat_sector[5] = 0xFF;
-    
-    // Write FAT1
-    if (ata_write_sector(1, fat_sector) != 0) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    
-    // Write FAT2
-    if (ata_write_sector(10, fat_sector) != 0) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    
-    uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    terminal_setcolor(success_color);
-    terminal_writestring("OK\n");
-    uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    terminal_setcolor(normal_color);
-    
-    return INSTALLER_OK;
+    terminal_writestring("Welcome files created.\n"); return INSTALLER_OK;
 }
 
-int installer_install_kernel(void) {
-    terminal_writestring("Installing kernel...\n");
-    terminal_writestring("Writing kernel to disk...\n");
-    
-    // For now, just write a placeholder
-    // In a real implementation, you would read the kernel from memory
-    memset(sector_buffer, 0, 512);
-    const char* kernel_marker = "AO-KERNEL";
-    for (int i = 0; kernel_marker[i]; i++) {
-        sector_buffer[i] = kernel_marker[i];
-    }
-    
-    // Write kernel starting at sector 35 (after welcome files)
-    if (ata_write_sector(35, sector_buffer) != 0) {
-        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-        terminal_setcolor(error_color);
-        terminal_writestring("ERROR: Failed to write kernel\n");
-        uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-        terminal_setcolor(normal_color);
-        return INSTALLER_WRITE_ERROR;
-    }
-    
-    uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    terminal_setcolor(success_color);
-    terminal_writestring("OK\n");
-    uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    terminal_setcolor(normal_color);
-    
-    return INSTALLER_OK;
-}
+int installer_install_kernel(void) { terminal_writestring("Kernel preserved in reserved area.\n"); return INSTALLER_OK; }
+int installer_install_bootloader(void) { terminal_writestring("Bootloader preserved and BPB installed.\n"); return INSTALLER_OK; }
 
-int installer_install_bootloader(void) {
-    terminal_writestring("Installing bootloader...\n");
-    
-    // Read current boot sector
-    if (ata_read_sector(0, sector_buffer) != 0) {
-        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-        terminal_setcolor(error_color);
-        terminal_writestring("ERROR: Failed to read boot sector\n");
-        uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-        terminal_setcolor(normal_color);
-        return INSTALLER_READ_ERROR;
-    }
-    
-    // Add simple bootloader code (just a placeholder for now)
-    // In a real implementation, this would be actual bootloader code
-    const char* boot_msg = "AO OS Boot";
-    for (int i = 0; boot_msg[i] && i < 50; i++) {
-        sector_buffer[100 + i] = boot_msg[i];
-    }
-    
-    // Write back boot sector
-    if (ata_write_sector(0, sector_buffer) != 0) {
-        uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
-        terminal_setcolor(error_color);
-        terminal_writestring("ERROR: Failed to write bootloader\n");
-        uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-        terminal_setcolor(normal_color);
-        return INSTALLER_WRITE_ERROR;
-    }
-    
-    uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    terminal_setcolor(success_color);
-    terminal_writestring("OK\n");
-    uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    terminal_setcolor(normal_color);
-    
-    return INSTALLER_OK;
+static installer_fs_t choose_filesystem(void) {
+    terminal_writestring("\nChoose filesystem:\n  1. FAT12 (compatibility)\n  2. FAT16 (recommended)\n  3. FAT32 (large volumes)\nSelection [1-3]: ");
+    for (;;) { unsigned char c=keyboard_getchar(); if (c>='1'&&c<='3') { terminal_putchar(c); terminal_writestring("\n"); return c=='1'?INSTALLER_FS_FAT12:(c=='2'?INSTALLER_FS_FAT16:INSTALLER_FS_FAT32); } asm volatile("hlt"); }
 }
 
 int installer_run(void) {
-    uint8_t title_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
-    terminal_setcolor(title_color);
-    terminal_writestring("\n");
-    terminal_writestring("================================================================================\n");
-    terminal_writestring("                            AO OS Installer v1.0                               \n");
-    terminal_writestring("================================================================================\n");
-    terminal_writestring("\n");
-    
-    uint8_t normal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
-    terminal_setcolor(normal_color);
-    
-    // Step 1: Detect disk
-    if (installer_detect_disk() != INSTALLER_OK) {
-        return INSTALLER_NO_DISK;
-    }
-    terminal_writestring("\n");
-    
-    // Step 2: Prepare disk
-    if (installer_prepare_disk() != INSTALLER_OK) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    terminal_writestring("\n");
-    
-    // Step 3: Format filesystem
-    if (installer_format_filesystem() != INSTALLER_OK) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    terminal_writestring("\n");
-    
-    // Step 4: Create welcome files
-    if (installer_create_welcome_files() != INSTALLER_OK) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    terminal_writestring("\n");
-    
-    // Step 5: Install kernel
-    if (installer_install_kernel() != INSTALLER_OK) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    terminal_writestring("\n");
-    
-    // Step 6: Install bootloader
-    if (installer_install_bootloader() != INSTALLER_OK) {
-        return INSTALLER_WRITE_ERROR;
-    }
-    terminal_writestring("\n");
-    
-    // Success message
-    terminal_setcolor(title_color);
-    terminal_writestring("================================================================================\n");
-    uint8_t success_color = vga_entry_color(VGA_COLOR_LIGHT_GREEN, VGA_COLOR_BLACK);
-    terminal_setcolor(success_color);
-    terminal_writestring("                       Installation complete!                                  \n");
-    terminal_setcolor(title_color);
-    terminal_writestring("================================================================================\n");
-    
-    terminal_setcolor(normal_color);
-    terminal_writestring("\n");
-    terminal_writestring("Rebooting in 3 seconds...\n");
-    terminal_writestring("\n");
-    
-    klog_info("Installation completed successfully");
-    
-    // Wait 3 seconds before reboot
-    extern void timer_wait(uint32_t ticks);
-    timer_wait(300);  // 3 seconds at 100Hz
-    
-    // Reboot
-    extern void system_reboot(void);
-    system_reboot();
-    
-    return INSTALLER_OK;
+    terminal_writestring("\n================ AO OS Installer ================\n");
+    if (installer_detect_disk()!=INSTALLER_OK) return INSTALLER_NO_DISK;
+    selected_fs=choose_filesystem();
+    if (installer_prepare_disk()!=INSTALLER_OK) { klog_error("Installer disk preparation failed"); return INSTALLER_WRITE_ERROR; }
+    if (installer_format_filesystem()!=INSTALLER_OK) { klog_error("Installer filesystem format failed"); return INSTALLER_WRITE_ERROR; }
+    if (installer_create_welcome_files()!=INSTALLER_OK) { klog_error("Installer welcome file creation failed"); return INSTALLER_WRITE_ERROR; }
+    installer_install_kernel(); installer_install_bootloader();
+    terminal_writestring("Installation complete. Rebooting in 3 seconds...\n"); klog_info("Installation completed successfully");
+    extern void timer_wait(uint32_t); extern void system_reboot(void); timer_wait(300); system_reboot(); return INSTALLER_OK;
 }

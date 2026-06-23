@@ -5,7 +5,14 @@
 [BITS 16]
 [ORG 0x7C00]
 
+; Leave the standard BPB/EBPB window free.  The installer overlays bytes
+; 3..89 with FAT12/16/32 metadata without touching executable code.
 start:
+    jmp short boot_code
+    nop
+    times 90 - ($ - $$) db 0
+
+boot_code:
     cli
     xor ax, ax
     mov ds, ax
