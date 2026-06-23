@@ -2,6 +2,34 @@
 
 All notable changes to AO OS will be documented in this file.
 
+## [Unreleased] - FAT16/FAT32 and Filesystem Hardening
+
+### Added
+- Shared FAT driver with automatic FAT12, FAT16, and FAT32 detection from BPB geometry and data-cluster count
+- FAT16 and FAT32 read/write, file creation/deletion, subdirectories, and multi-cluster file support
+- Installer selection for FAT12, FAT16, or FAT32 with capacity-aware layout generation
+- FAT32 root cluster, FSInfo, backup boot metadata, and mirrored FAT handling
+- `make test-fat` host integration suite using the production FAT driver with a file-backed ATA adapter
+- Boundary images: 2 MiB FAT12, 32 MiB FAT16, and 128 MiB FAT32
+- Regression coverage for files spanning more than 37 clusters, deletion/reuse, 96-entry directories, and corrupted FAT chains
+
+### Changed
+- Development disk image increased to 64 MiB so every installer filesystem choice is valid
+- Stage 1 reserves the standard BPB/EBPB window; the installer keeps sectors 0-511 as the FAT reserved boot area
+- Filesystem abstraction now reports FAT12, FAT16, or FAT32 and falls back to ramfs only when no valid FAT volume is found
+- ATA IDENTIFY capacity is exposed to the installer, and ATA wait timeouts were increased for large FAT32 formats
+- FAT32 allocation/free operations maintain primary and backup FSInfo free-space metadata
+
+### Fixed
+- Cyclic FAT chains can no longer return repeated data until the directory entry's file size is satisfied
+- Reads now reject premature EOC, bad/reserved markers, and cluster references outside the data area
+- Cluster-backed directories grow beyond their first cluster and reuse deleted entry slots
+- FAT32 installation writes FSInfo and backup metadata in a stable LBA order
+
+### Tested
+- Clean FAT12/FAT16/FAT32 images pass `fsck.fat`; deliberately corrupted copies are rejected
+- Full WSL kernel build succeeds with GCC, NASM, and GNU binutils
+
 ## [2.0.0] - Preemptive Multitasking, User Mode, Process Management
 
 ### Added
@@ -36,8 +64,8 @@ All notable changes to AO OS will be documented in this file.
   - `calc <expr>` — basic integer calculator
 
 ### Changed
-- Kernel version bumped to 2.0.0 (codename: Nova)
-- Boot menu version string updated to "v2.0.0 - Nova"
+- Kernel version bumped to 2.0.0 (codename: Nebula)
+- Boot menu version string updated to "v2.0.0 - Nebula"
 - Kernel init order extended: ... → process_init → scheduler_start → shell_run
 - Shell busy loop uses `hlt` instruction to reduce CPU usage
 - `keyboard_wait_for_key()` uses `hlt` to avoid busy polling

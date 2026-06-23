@@ -25,6 +25,7 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - GCC cross-compiler (`x86_64-elf-gcc`)
 - GNU Make
 - QEMU (for testing)
+- dosfstools and mtools (for FAT integration tests)
 
 ## Building and Running
 
@@ -33,6 +34,7 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - `x86_64-elf-gcc` cross-compiler
 - `nasm` assembler
 - `qemu-system-x86_64` for testing
+- `mkfs.fat`, `fsck.fat`, and `mtools` for `make test-fat`
 
 ### Build Commands
 
@@ -47,6 +49,13 @@ make clean    # Clean build files
 The installer offers FAT12, FAT16, and FAT32. FAT16 is the default recommendation;
 FAT32 requires a disk large enough to contain at least 65,525 data clusters. The
 development image is 64 MiB so every installer option produces a valid FAT type.
+The first 512 sectors are reserved for the AO bootloader and raw kernel, allowing
+the installed FAT volume and the custom boot path to coexist.
+
+`make test-fat` runs the production FAT driver against file-backed ATA images:
+2 MiB FAT12, 32 MiB FAT16, and 128 MiB FAT32. It covers multi-cluster files,
+cluster deletion/reuse, expanding directories, corrupted chains, and external
+validation with `fsck.fat`.
 
 ### Debugging
 
@@ -107,7 +116,7 @@ ao-os/
 │   ├── fs/            # Filesystem
 │   │   ├── fs.c       # Filesystem abstraction layer
 │   │   ├── fat.c      # Shared FAT12/FAT16/FAT32 implementation
-│   │   ├── fat12.c    # Legacy FAT12 implementation
+│   │   ├── fat12.c    # Retained legacy FAT12 source (not linked)
 │   │   └── ramfs.c    # RAM filesystem fallback
 │   ├── memory/        # Memory management
 │   │   ├── pmm.c      # Physical page frame allocator (bitmap, E820)
@@ -129,6 +138,7 @@ ao-os/
 │       └── string.c   # String utilities
 ├── include/           # Header files
 ├── documentation/     # Documentation
+├── tools/tests/       # Host-side FAT integration and corruption tests
 ├── linker.ld          # Linker script (kernel at 1MB)
 └── Makefile           # Build system
 ```
@@ -143,12 +153,15 @@ ao-os/
 - `sysinfo` - Display system information (CPU, RAM, uptime)
 - `diskinfo` - Display disk controller information
 - `sconsole --status` - Display serial console status
-- `ls` - List files in RAM filesystem
+- `ls` - List files and directories in the active filesystem
 - `cat <filename>` - Display file contents
 - `edit <filename>` - Edit file with simple text editor (ESC to save)
 - `write <filename> <content>` - Create or modify a file
 - `rm <filename>` - Remove a file
 - `touch <filename>` - Create an empty file
+- `mkdir <dirname>` / `rmdir <dirname>` - Create or remove an empty directory
+- `cd <dirname>` / `pwd` - Navigate and display the current directory
+- `install` - Reinstall AO OS using FAT12, FAT16, or FAT32
 - `mem` - Display memory usage statistics
 - `uptime` - Display system uptime
 - `color <fg>` - Change text color (e.g., `color light_green`)
@@ -165,7 +178,7 @@ light_blue, light_green, light_cyan, light_red, light_magenta, yellow, white
 ```
 bootloader --> kernel --> drivers --> fs --> memory --> process --> user programs
      |            |          |         |       |           |            |
-  stage1/2    kernel.c    vga.c    fat12.c  pmm.c    scheduler     AOB format
+  stage1/2    kernel.c    vga.c     fat.c   pmm.c    scheduler     AOB format
               gdt/idt    keyboard   ramfs   vmm.c   context switch  syscalls
                           timer             heap    ring 3 support  int 0x80
 ```
@@ -185,7 +198,8 @@ AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
 
 - Single user process at a time (shared virtual address space at 0x200000)
 - No per-process page tables (all processes share the kernel page table)
-- FAT filesystems use 8.3 names and have no permissions
+- FAT creation currently uses 8.3 names; LFN creation and permissions are not supported
+- A single FAT volume is mounted automatically; there is no general VFS or mount table yet
 - No networking support
 - AOB executable format without dynamic linking or arguments passing to ring 3
 - No inter-process communication (IPC)

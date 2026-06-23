@@ -122,14 +122,19 @@
   - Clean architecture for multiple filesystem support
 - **FAT Filesystems**:
   - Full read/write support for FAT12, FAT16, and FAT32-formatted disks
-  - BPB-based type detection and FAT32 cluster-chain root directories
+  - BPB and data-cluster-count based type detection
+  - FAT12 packed 12-bit entries, FAT16 entries, and masked FAT32 entries
+  - FAT32 cluster-chain root directories and FSInfo free-space maintenance
   - **Complete subdirectory support** - create and navigate directory trees
   - Boot sector and BPB parsing
   - FAT table and cluster chain navigation
   - Directory cluster reading and writing
   - File listing, reading, and writing in any directory
-  - Multi-cluster file support (files up to 4KB)
+  - Multi-cluster file support in the driver; shell buffers currently cap most commands at 16KB
   - Cluster chain allocation and traversal
+  - Cluster deletion and deterministic reuse of freed clusters
+  - Directory growth across multiple clusters (tested with 96 entries)
+  - Corrupt-chain rejection for cycles, premature EOC, bad markers, and out-of-range clusters
   - Persistent storage support
   - Create, delete, and update files/directories anywhere in filesystem
 - **ATA PIO Driver**: Primary ATA controller support
@@ -208,7 +213,7 @@
   - Works in root and subdirectories
   - Creates nested directory structures
 - **rmdir**: Remove directory (usage: `rmdir <dirname>`)
-  - Deletes directory and frees clusters
+  - Removes empty directories and frees their cluster chains
 - **cd**: Navigate directory tree (usage: `cd <dirname>`)
   - `cd /` - Go to root directory
   - `cd ..` - Go to parent directory
@@ -219,10 +224,10 @@
 #### System Commands
 - **install**: Install AO OS to disk (with confirmation prompt)
   - Detects ATA disk
-  - Prepares disk (clears sectors)
-  - Formats FAT12 filesystem
-  - Installs kernel to disk
-  - Installs bootloader to MBR
+  - Reads disk capacity with ATA IDENTIFY
+  - Offers FAT12, FAT16, and FAT32 formatting
+  - Preserves the bootloader and raw kernel in a 512-sector FAT reserved area
+  - Creates valid BPB/EBPB metadata, mirrored FATs, roots, FAT32 FSInfo, and welcome files
   - Interactive y/n confirmation
 - **reboot**: Restart the computer using keyboard controller reset
 - **shutdown**: Power off the system using ACPI (works in QEMU and some VMs)
@@ -237,6 +242,10 @@
   - System (Hardware control, Panic handler)
 - **Header Files**: Public API in include/, internal headers within driver subdirectories
 - **Build System**: Automated build with Makefile, auto-generated header dependencies (-MMD -MP)
+- **FAT Test Harness**: File-backed mock ATA tests around the production FAT driver
+  - 2 MiB FAT12, 32 MiB FAT16, and 128 MiB FAT32 boundary images
+  - Multi-cluster I/O, delete/reuse, 96-entry directories, and corruption cases
+  - Clean/corrupt cross-checking with `fsck.fat`
 - **Error Handling**: Kernel panic system for fatal errors
 
 ## Planned Features
