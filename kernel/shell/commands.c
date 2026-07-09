@@ -17,6 +17,7 @@
 #include "aob.h"
 #include "rtc.h"
 #include "net.h"
+#include "process.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -33,8 +34,12 @@ void cmd_help(void) {
     terminal_writestring("  sysinfo  - Display system information\n");
     terminal_writestring("  diskinfo - Display disk information\n");
     terminal_writestring("  netstat  - Display network stack status\n");
+    terminal_writestring("  ping     - Send ICMP/ARP packet (usage: ping <ipv4>)\n");
     terminal_writestring("  sconsole - Serial console status (usage: sconsole --status)\n");
     terminal_writestring("  checkfs  - Display current filesystem type\n");
+    terminal_writestring("  mount    - Mount pseudo filesystem (usage: mount <type> <path>)\n");
+    terminal_writestring("  umount   - Unmount filesystem (usage: umount <path>)\n");
+    terminal_writestring("  mounts   - List mounted filesystems\n");
     terminal_writestring("  install  - Install AO OS to disk\n");
     terminal_writestring("  ls       - List files in filesystem\n");
     terminal_writestring("  cat      - Display file contents (usage: cat <filename>)\n");
@@ -63,6 +68,7 @@ void cmd_help(void) {
     terminal_writestring("  calc     - Calculator (usage: calc 10 + 3)\n");
     terminal_writestring("  ps       - List running processes\n");
     terminal_writestring("  kill     - Terminate a process (usage: kill <pid>)\n");
+    terminal_writestring("  waitpid  - Wait for a process (usage: waitpid <pid>)\n");
     terminal_writestring("  reap     - Clean up finished background processes\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
     terminal_writestring("  reboot   - Restart the computer\n");
@@ -492,11 +498,21 @@ static void print_hex16(uint16_t v) {
 }
 
 void cmd_netstat(void) {
+    net_poll();
     const net_status_t* s = net_get_status();
     terminal_writestring("Network stack: ");
     terminal_writestring(s->initialized ? "initialized\n" : "not initialized\n");
     terminal_writestring("Driver:        ");
     terminal_writestring(net_driver_name(s->driver));
+    terminal_writestring("\n");
+    terminal_writestring("TX packets:    ");
+    print_uint32(s->packets_tx);
+    terminal_writestring("\nRX packets:    ");
+    print_uint32(s->packets_rx);
+    terminal_writestring("\nRX errors:     ");
+    print_uint32(s->rx_errors);
+    terminal_writestring("\nARP entries:   ");
+    print_uint32(s->arp_entries);
     terminal_writestring("\n");
     if (s->driver != NET_DRIVER_NONE) {
         terminal_writestring("PCI:           bus ");
@@ -509,9 +525,31 @@ void cmd_netstat(void) {
         print_hex16(s->vendor_id);
         terminal_writestring("\nDevice:        ");
         print_hex16(s->device_id);
+        terminal_writestring("\nI/O base:      ");
+        print_hex16((uint16_t)s->io_base);
         terminal_writestring("\n");
     }
-    terminal_writestring("Protocols:     ARP/IPv4/ICMP/UDP/TCP skeleton loaded\n");
+    terminal_writestring("Protocols:     ARP cache, IPv4 dispatch, ICMP echo TX/RX\n");
+}
+
+void cmd_ping(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: ping <ipv4>\n");
+        return;
+    }
+    uint32_t ip = net_parse_ipv4(args);
+    if (!ip) {
+        terminal_writestring("Invalid IPv4 address\n");
+        return;
+    }
+    int r = net_ping_ipv4(ip);
+    if (r > 0) {
+        terminal_writestring("ping reply received\n");
+    } else if (r == 0) {
+        terminal_writestring("ping timed out or ARP unresolved\n");
+    } else {
+        terminal_writestring("ping failed: no supported NIC or TX error\n");
+    }
 }
 
 void cmd_sconsole(const char* args) {
@@ -790,6 +828,60 @@ void cmd_checkfs(void) {
     terminal_writestring("========================================\n");
     
     terminal_setcolor(label_color);
+}
+
+void cmd_mount(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: mount <proc|dev|ramfs|root> <path>\n");
+        return;
+    }
+    char type[32];
+    char path[64];
+    int i = 0, j = 0;
+    while (args[i] && args[i] != ' ' && j < (int)sizeof(type) - 1) type[j++] = args[i++];
+    type[j] = '\0';
+    while (args[i] == ' ') i++;
+    j = 0;
+    while (args[i] && args[i] != ' ' && j < (int)sizeof(path) - 1) path[j++] = args[i++];
+    path[j] = '\0';
+
+    if (!type[0] || !path[0]) {
+        terminal_writestring("Usage: mount <proc|dev|ramfs|root> <path>\n");
+        return;
+    }
+    if (fs_mount(type, path) == 0) {
+        terminal_writestring("Mounted ");
+        terminal_writestring(type);
+        terminal_writestring(" at ");
+        terminal_writestring(path);
+        terminal_writestring("\n");
+    } else {
+        terminal_writestring("mount failed\n");
+    }
+}
+
+void cmd_umount(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: umount <path>\n");
+        return;
+    }
+    if (fs_umount(args) == 0) {
+        terminal_writestring("Unmounted ");
+        terminal_writestring(args);
+        terminal_writestring("\n");
+    } else {
+        terminal_writestring("umount failed\n");
+    }
+}
+
+void cmd_mounts(void) {
+    char buffer[1024];
+    uint32_t size = 0;
+    if (fs_mounts(buffer, &size, sizeof(buffer)) == 0) {
+        terminal_writestring(buffer);
+    } else {
+        terminal_writestring("Failed to list mounts\n");
+    }
 }
 
 void cmd_install(void) {
@@ -1603,6 +1695,27 @@ void cmd_calc(const char* args) {
     print_uint32((uint32_t)result);
 
     terminal_setcolor(lbl);
+    terminal_writestring("\n");
+}
+
+void cmd_waitpid(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: waitpid <pid>\n");
+        return;
+    }
+    uint64_t pid = 0;
+    while (*args >= '0' && *args <= '9') {
+        pid = pid * 10 + (uint64_t)(*args - '0');
+        args++;
+    }
+    int status = 0;
+    int r = process_waitpid(pid, &status, 0);
+    if (r < 0) {
+        terminal_writestring("waitpid failed\n");
+        return;
+    }
+    terminal_writestring("pid exited with status ");
+    print_uint32((uint32_t)status);
     terminal_writestring("\n");
 }
 

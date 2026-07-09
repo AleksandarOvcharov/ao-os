@@ -17,7 +17,7 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - **AOB + ELF Executables**: Custom AOB binaries and ELF64 `ET_EXEC` user programs with syscall API
 - **Per-Process Page Tables**: User processes run with private CR3 address spaces and isolated user pages
 - **VFS + Block Cache**: FAT/RAMFS are mounted through a VFS mount table with cached sector I/O for FAT
-- **PCI + Network Bootstrap**: PCI bus scan with NE2000/virtio-net detection and ARP/IPv4/ICMP/UDP/TCP stack skeleton
+- **PCI + Networking**: PCI scan, NE2000 TX/RX polling, ARP cache, IPv4 dispatch, and ICMP ping path
 - **40+ Shell Commands**: File operations, directory navigation, text editor, system tools, process management (`ps`, `kill`)
 - **Interactive Shell**: Command history, colored prompts, working directory display
 - Serial console output for debugging (COM1)
@@ -164,6 +164,7 @@ ao-os/
 - `sysinfo` - Display system information (CPU, RAM, uptime)
 - `diskinfo` - Display disk controller information
 - `netstat` - Display PCI/network stack status
+- `ping <ipv4>` - Send an ARP request or ICMP echo packet through the network stack
 - `sconsole --status` - Display serial console status
 - `ls` - List files and directories in the active filesystem
 - `cat <filename>` - Display file contents
@@ -173,6 +174,8 @@ ao-os/
 - `touch <filename>` - Create an empty file
 - `mkdir <dirname>` / `rmdir <dirname>` - Create or remove an empty directory
 - `cd <dirname>` / `pwd` - Navigate and display the current directory
+- `mount <type> <path>` / `umount <path>` / `mounts` - Manage and list VFS mounts
+- `cat /proc/processes`, `cat /dev/null`, `cat /dev/zero` - Use pseudo-filesystems and devices
 - `install` - Reinstall AO OS using FAT12, FAT16, or FAT32
 - `*.aob` / `*.elf` - Run AOB or ELF64 user executables; append `&` for background execution
 - `mem` - Display memory usage statistics
@@ -204,26 +207,29 @@ AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
 - **User processes (PID 1+)** execute AOB or ELF64 binaries in ring 3 (user mode)
 - **Round-robin scheduler** with 50ms time quantum, driven by PIT timer at 100Hz
 - **Background jobs**: `.aob` and `.elf` programs can run detached with `&`, allowing multiple isolated user processes to share CPU time
+- **waitpid/sleep**: user programs can wait for child process exit and sleep on scheduler wakeup ticks
 - **Context switching** saves/restores all 15 GPRs + CPU interrupt frame (RIP, CS, RFLAGS, RSP, SS)
 - **TSS** provides RSP0 for automatic ring 3 -> ring 0 stack switching on interrupts
 - **Syscall interface** via `int 0x80` allows user programs to request kernel services
 
 ## Limitations
 
-- User processes have private page tables, but page-table cleanup is still basic
+- Process cleanup frees private user pages and private page-table hierarchy pages; full parent/child ownership tracking is still basic
 - FAT creation currently uses 8.3 names; LFN creation and permissions are not supported
-- VFS has a small mount table and `/dev` mount, but lacks full mount/unmount shell management and per-mount CWD tracking
-- Network code currently detects PCI Ethernet devices and exposes protocol skeletons; packet TX/RX and full ARP/IPv4/ICMP/UDP/TCP are not complete yet
+- VFS has mount/umount commands, `/proc`, and `/dev`, but lacks per-mount CWD tracking and persistent multi-disk mount configuration
+- Network code supports NE2000 polling RX/TX, ARP cache/replies, IPv4 dispatch, and ICMP echo handling; IRQ-driven RX, routing, UDP, TCP, and virtio-net data path are not complete yet
 - ELF support is limited to static ELF64 `ET_EXEC` load segments; no dynamic linker yet
 - No inter-process communication (IPC)
 - No signals or asynchronous event delivery
 
 ## Roadmap
 
-- [ ] Packet TX/RX for NE2000 and virtio-net
-- [ ] ARP, IPv4, ICMP, UDP, and TCP implementations on top of the network bootstrap
-- [ ] Shell mount/unmount commands and multiple block-device mounting
-- [ ] Stronger process cleanup for page-table hierarchy pages and zombie accounting
+- [ ] IRQ-driven NE2000 receive path instead of polling-only RX
+- [ ] virtio-net TX/RX data path
+- [ ] IPv4 routing table, UDP, and TCP implementations
+- [ ] More complete ping diagnostics, packet timeouts, and error reporting
+- [ ] Multiple physical block-device mounting under `/mnt`
+- [ ] Parent/child process ownership and richer zombie accounting
 - [ ] ELF relocation, PIE, and dynamic linking support
 - [ ] FAT write optimizations and long-name creation
 - [ ] Graphics mode (VESA framebuffer)

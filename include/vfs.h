@@ -20,6 +20,8 @@ typedef struct {
 void vfs_init(void);
 int vfs_mount_root(const vfs_ops_t* ops);
 int vfs_mount(const char* path, const vfs_ops_t* ops);
+int vfs_umount(const char* path);
+int vfs_get_mounts(char* buffer, uint32_t* size, uint32_t max_size);
 const char* vfs_get_root_type(void);
 int vfs_create(const char* path, const char* data, uint32_t size);
 int vfs_read(const char* path, char* buffer, uint32_t* size);

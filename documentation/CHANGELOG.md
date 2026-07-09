@@ -13,8 +13,15 @@ All notable changes to AO OS will be documented in this file.
 - VFS mount table with longest-prefix path dispatch and `/dev` ramfs mount
 - Write-through sector block cache for FAT disk I/O
 - Detached background `.aob`/`.elf` jobs via shell `&`, plus background process reaping
+- `waitpid` process waiting with exit-status collection and `SYS_WAITPID`
+- Scheduler-backed process sleep/wakeup ticks and `SYS_SLEEP`
+- Private page-table hierarchy cleanup during process reap
 - PCI bus scanner and network bootstrap with NE2000/virtio-net detection
-- `netstat` shell command and ARP/IPv4/ICMP/UDP/TCP initialization skeletons
+- `/proc` pseudo-filesystem with `/proc/processes`
+- `/dev` pseudo-filesystem with `/dev/null` and `/dev/zero`
+- `mount`, `umount`, and `mounts` shell commands
+- `netstat` shell command, NE2000-compatible TX path, polling RX path, ARP cache/request/reply handling, IPv4 dispatch, and ICMP echo transmit/reply handling via `ping`
+- `/proc/net/arp` and `/proc/net/dev` network observability files
 - Installer selection for FAT12, FAT16, or FAT32 with capacity-aware layout generation
 - FAT32 root cluster, FSInfo, backup boot metadata, and mirrored FAT handling
 - `make test-fat` host integration suite using the production FAT driver with a file-backed ATA adapter

@@ -107,7 +107,7 @@ int vmm_map_page_in(uint64_t cr3, uint64_t virt, uint64_t phys, uint64_t flags) 
     if (!(pml4[pml4_idx] & PTE_PRESENT)) {
         uint64_t pdpt_page = alloc_table_page();
         if (pdpt_page == 0) return -1;
-        pml4[pml4_idx] = pdpt_page | parent_flags;
+        pml4[pml4_idx] = pdpt_page | parent_flags | PTE_PRIVATE_TABLE;
     } else if (flags & PTE_USER) {
         pml4[pml4_idx] |= PTE_USER;
     }
@@ -119,7 +119,7 @@ int vmm_map_page_in(uint64_t cr3, uint64_t virt, uint64_t phys, uint64_t flags) 
     if (!(pdpt[pdpt_idx] & PTE_PRESENT)) {
         uint64_t pd_page = alloc_table_page();
         if (pd_page == 0) return -1;
-        pdpt[pdpt_idx] = pd_page | parent_flags;
+        pdpt[pdpt_idx] = pd_page | parent_flags | PTE_PRIVATE_TABLE;
     } else if (flags & PTE_USER) {
         pdpt[pdpt_idx] |= PTE_USER;
     }
@@ -143,13 +143,13 @@ int vmm_map_page_in(uint64_t cr3, uint64_t virt, uint64_t phys, uint64_t flags) 
         }
 
         /* Replace the 2MB PD entry with a pointer to the new PT */
-        pd[pd_idx] = pt_page | parent_flags;
+        pd[pd_idx] = pt_page | parent_flags | PTE_PRIVATE_TABLE;
     }
 
     if (!(pd[pd_idx] & PTE_PRESENT)) {
         uint64_t pt_page = alloc_table_page();
         if (pt_page == 0) return -1;
-        pd[pd_idx] = pt_page | parent_flags;
+        pd[pd_idx] = pt_page | parent_flags | PTE_PRIVATE_TABLE;
     } else if (flags & PTE_USER) {
         pd[pd_idx] |= PTE_USER;
     }
@@ -236,4 +236,27 @@ uint64_t vmm_get_physical_in(uint64_t cr3, uint64_t virt) {
 
 uint64_t vmm_get_physical(uint64_t virt) {
     return vmm_get_physical_in(kernel_pml4_phys, virt);
+}
+
+static void free_private_tables(uint64_t table_phys, int level) {
+    uint64_t* table = phys_to_virt(table_phys);
+    for (int i = 0; i < 512; i++) {
+        if (!(table[i] & PTE_PRESENT)) continue;
+        if (!(table[i] & PTE_PRIVATE_TABLE)) continue;
+        if (table[i] & PTE_HUGE) continue;
+
+        uint64_t child = table[i] & PTE_ADDR_MASK;
+        if (level > 1) {
+            free_private_tables(child, level - 1);
+        }
+        pmm_free_page(child);
+        table[i] = 0;
+    }
+}
+
+void vmm_destroy_address_space(uint64_t cr3) {
+    cr3 &= PTE_ADDR_MASK;
+    if (!cr3 || cr3 == kernel_pml4_phys) return;
+    free_private_tables(cr3, 3);
+    pmm_free_page(cr3);
 }

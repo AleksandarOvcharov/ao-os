@@ -20,8 +20,10 @@
   - Timer-driven (PIT at 100Hz) preemptive context switching
   - Full register save/restore (15 GPRs + iretq frame) in assembly
   - Up to 8 concurrent processes with per-process 8KB kernel stacks
-  - Process states: UNUSED, READY, RUNNING, BLOCKED, TERMINATED
+  - Process states: UNUSED, READY, RUNNING, BLOCKED, SLEEPING, TERMINATED
   - Detached background `.aob`/`.elf` jobs using shell `&`
+  - `waitpid` exit-status collection and scheduler-backed sleep/wakeup ticks
+  - Private user page and private page-table hierarchy cleanup on process reap
 - **User Mode (Ring 3)**:
   - User programs execute in ring 3 with hardware-enforced privilege separation
   - Separate user code/data GDT segments with DPL=3
@@ -32,7 +34,7 @@
   - Create, terminate, wait, and list processes
   - Kernel process (PID 0) runs the shell
   - User processes (PID 1+) run AOB or ELF64 executables
-  - `ps`, `kill`, and `reap` shell commands
+  - `ps`, `kill`, `waitpid`, and `reap` shell commands
 - **Syscall Interface (int 0x80)**:
   - System call dispatcher with SYS_WRITE, SYS_EXIT, SYS_OPEN, SYS_READ, SYS_CLOSE
   - IDT gate at DPL=3 for user-mode access
@@ -161,14 +163,20 @@
 - **VFS Mount Table**:
   - Longest-prefix path dispatch for mounted filesystem backends
   - Root mount at `/`
-  - `/dev` mount backed by ramfs as the first pseudo-filesystem slot
-  - Foundation for future `/mnt/disk1`, device files, and mount/unmount commands
+  - `/proc` process pseudo-filesystem with `/proc/processes`
+  - `/dev` device pseudo-filesystem with `/dev/null` and `/dev/zero`
+  - Shell `mount`, `umount`, and `mounts` commands
+  - Foundation for future `/mnt/disk1` and persistent multi-disk mount configuration
 - **PCI + Network Bootstrap**:
   - PCI configuration-space scan using ports `0xCF8/0xCFC`
   - Ethernet-class device detection
   - NE2000 (`10ec:8029`) and virtio-net (`1af4:*`) recognition
   - `netstat` shell command for stack/device status
-  - ARP, IPv4, ICMP, UDP, and TCP initialization skeletons
+  - NE2000-compatible packet transmit and polling receive path
+  - ARP cache, ARP request/reply handling, IPv4 dispatch, and ICMP echo request/reply handling
+  - `ping <ipv4>` sends ARP as needed, sends ICMP echo, polls RX, and reports reply/timeout
+  - `/proc/net/arp` and `/proc/net/dev` expose network observability
+  - IRQ-driven RX, routing, UDP, TCP, and virtio-net data path remain planned
 
 ### Input
 - **Keyboard Driver**: PS/2 keyboard with interrupt-driven input (IRQ1)
@@ -273,17 +281,19 @@
 - [ ] Shell piping and redirection (`|`, `>`, `<`)
 - [ ] Shell scripting / batch files
 - [ ] ELF userland examples and build recipe
-- [ ] Shell `mount`/`umount` commands
+- [ ] IRQ-driven NE2000 receive path
+- [ ] Better ping timeout/error diagnostics
 
 ### Medium Term
 - [ ] Multiple virtual terminals
 - [ ] DMA for disk I/O
 - [ ] ELF relocation, PIE, and dynamic linking support
-- [ ] Packet TX/RX for NE2000 and virtio-net
+- [ ] virtio-net TX/RX data path
+- [ ] Persistent multi-disk mount configuration
 
 ### Long Term
 - [ ] IPC mechanisms (pipes, shared memory)
-- [ ] ARP, IPv4, ICMP, UDP, and TCP implementations
+- [ ] IPv4 routing table, UDP, and TCP implementations
 - [ ] Graphics mode support (VESA framebuffer)
 - [ ] EXT2 or another second on-disk filesystem backend
 

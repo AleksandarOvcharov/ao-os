@@ -39,6 +39,8 @@ void process_init(void) {
     p->cr3 = vmm_get_cr3();
     p->exit_code = 0;
     p->detached = 0;
+    p->wait_target = 0;
+    p->wake_tick = 0;
     p->user_page_count = 0;
 
     current_process = p;
@@ -83,9 +85,7 @@ static void process_cleanup(process_t* p) {
     }
     p->user_page_count = 0;
 
-    if (p->cr3 && p->cr3 != vmm_get_kernel_cr3()) {
-        pmm_free_page(p->cr3);
-    }
+    if (p->cr3 && p->cr3 != vmm_get_kernel_cr3()) vmm_destroy_address_space(p->cr3);
     p->cr3 = 0;
 }
 
@@ -198,6 +198,8 @@ process_t* process_create(const char* name, uint64_t entry_point, int is_user) {
     }
     p->exit_code = 0;
     p->detached = 0;
+    p->wait_target = 0;
+    p->wake_tick = 0;
     p->user_page_count = 0;
 
     /* Set up kernel stack */
@@ -255,8 +257,10 @@ void process_exit(int exit_code) {
 
     /* Unblock any waiting process */
     for (int i = 0; i < MAX_PROCESSES; i++) {
-        if (processes[i].state == PROC_BLOCKED) {
+        if (processes[i].state == PROC_BLOCKED &&
+            (processes[i].wait_target == 0 || processes[i].wait_target == current_process->pid)) {
             processes[i].state = PROC_READY;
+            processes[i].wait_target = 0;
         }
     }
 
@@ -267,20 +271,36 @@ void process_exit(int exit_code) {
 }
 
 void process_wait(uint64_t pid) {
+    process_waitpid(pid, 0, 0);
+}
+
+int process_waitpid(uint64_t pid, int* status, int options) {
     process_t* target = process_get(pid);
-    if (!target || target->state == PROC_UNUSED) return;
+    if (!target || target->state == PROC_UNUSED || pid == 0) return -1;
 
-    current_process->state = PROC_BLOCKED;
+    if (options & 1) {
+        if (target->state != PROC_TERMINATED) return 0;
+    } else {
+        current_process->wait_target = pid;
+        current_process->state = PROC_BLOCKED;
 
-    while (target->state != PROC_TERMINATED && target->state != PROC_UNUSED) {
-        asm volatile("sti; hlt");
+        while (target->state != PROC_TERMINATED && target->state != PROC_UNUSED) {
+            asm volatile("sti; hlt");
+        }
+
+        current_process->state = PROC_RUNNING;
+        current_process->wait_target = 0;
     }
 
-    current_process->state = PROC_RUNNING;
+    if (target->state == PROC_UNUSED) return -1;
+    if (status) *status = target->exit_code;
+    int exit_code = target->exit_code;
 
     /* Clean up terminated process */
     process_cleanup(target);
     target->state = PROC_UNUSED;
+    target->pid = 0;
+    return exit_code;
 }
 
 void process_detach(uint64_t pid) {
@@ -302,6 +322,25 @@ int process_reap_terminated(void) {
     return reaped;
 }
 
+static void wake_sleepers(void) {
+    uint64_t now = timer_get_ticks();
+    for (int i = 1; i < MAX_PROCESSES; i++) {
+        if (processes[i].state == PROC_SLEEPING && processes[i].wake_tick <= now) {
+            processes[i].wake_tick = 0;
+            processes[i].state = PROC_READY;
+        }
+    }
+}
+
+void process_sleep_ticks(uint64_t ticks) {
+    if (!current_process || current_process->pid == 0 || ticks == 0) return;
+    current_process->wake_tick = timer_get_ticks() + ticks;
+    current_process->state = PROC_SLEEPING;
+    while (current_process->state == PROC_SLEEPING) {
+        asm volatile("sti; hlt");
+    }
+}
+
 void process_terminate(uint64_t pid) {
     process_t* p = process_get(pid);
     if (!p || p->pid == 0) return;
@@ -319,6 +358,7 @@ void process_terminate(uint64_t pid) {
  * Returns the kernel stack pointer to restore (may be a different process). */
 uint64_t schedule_tick(uint64_t current_rsp) {
     timer_tick();
+    wake_sleepers();
 
     if (!scheduling_enabled || !current_process) return current_rsp;
 
@@ -326,7 +366,8 @@ uint64_t schedule_tick(uint64_t current_rsp) {
     int need_switch = 0;
 
     if (current_process->state == PROC_TERMINATED ||
-        current_process->state == PROC_BLOCKED) {
+        current_process->state == PROC_BLOCKED ||
+        current_process->state == PROC_SLEEPING) {
         need_switch = 1;
     } else {
         if (ticks_remaining > 0) ticks_remaining--;

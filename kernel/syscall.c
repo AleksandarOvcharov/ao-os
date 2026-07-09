@@ -21,6 +21,8 @@
 #define SYS_WRITE       11
 #define SYS_CLOSE       12
 #define SYS_SETCOLOR    13
+#define SYS_WAITPID     14
+#define SYS_SLEEP       15
 
 // Simple file handle table for user programs (max 8 open files)
 #define MAX_FD 8
@@ -161,6 +163,13 @@ int syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) 
 
         case SYS_SETCOLOR:
             terminal_setcolor((uint8_t)arg1);
+            return 0;
+
+        case SYS_WAITPID:
+            return process_waitpid(arg1, (int*)(uintptr_t)arg2, (int)arg3);
+
+        case SYS_SLEEP:
+            process_sleep_ticks(arg1);
             return 0;
 
         default:

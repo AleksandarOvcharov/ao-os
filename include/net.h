@@ -19,6 +19,12 @@ typedef struct {
     uint8_t function;
     uint32_t packets_rx;
     uint32_t packets_tx;
+    uint32_t rx_errors;
+    uint32_t arp_entries;
+    uint32_t last_ping_ip;
+    int last_ping_ok;
+    uint32_t io_base;
+    uint8_t mac[6];
 } net_status_t;
 
 void net_init(void);
@@ -29,5 +35,12 @@ int net_ipv4_init(void);
 int net_icmp_init(void);
 int net_udp_init(void);
 int net_tcp_init(void);
+int net_send_packet(const uint8_t* data, uint16_t len);
+int net_receive_packet(uint8_t* data, uint16_t* len);
+int net_poll(void);
+int net_ping_ipv4(uint32_t ip);
+uint32_t net_parse_ipv4(const char* s);
+int net_format_arp_cache(char* buffer, uint32_t* size, uint32_t max_size);
+int net_format_device_stats(char* buffer, uint32_t* size, uint32_t max_size);
 
 #endif

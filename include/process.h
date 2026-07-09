@@ -27,6 +27,7 @@ typedef enum {
     PROC_READY,
     PROC_RUNNING,
     PROC_BLOCKED,
+    PROC_SLEEPING,
     PROC_TERMINATED
 } process_state_t;
 
@@ -56,6 +57,8 @@ typedef struct {
     int is_user;                /* 1 = ring 3 process */
     int exit_code;
     int detached;               /* 1 = background process, reap automatically */
+    uint64_t wait_target;
+    uint64_t wake_tick;
 
     uint64_t user_pages[PROCESS_MAX_USER_PAGES];
     int user_page_count;
@@ -70,9 +73,11 @@ process_t* process_get(uint64_t pid);
 int process_is_running(uint64_t pid);
 void process_exit(int exit_code);
 void process_wait(uint64_t pid);
+int process_waitpid(uint64_t pid, int* status, int options);
 int process_list(process_t** list);
 int process_reap_terminated(void);
 void process_detach(uint64_t pid);
+void process_sleep_ticks(uint64_t ticks);
 int process_map_user_page(process_t* p, uint64_t virt, uint64_t flags);
 int process_write_user(process_t* p, uint64_t virt, const void* data, uint64_t size);
 int process_zero_user(process_t* p, uint64_t virt, uint64_t size);

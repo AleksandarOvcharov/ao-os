@@ -24,7 +24,7 @@ void vfs_init(void) {
 }
 
 int vfs_mount(const char* path, const vfs_ops_t* ops) {
-    if (!path || !ops || path[0] != '/' || mount_count >= VFS_MAX_MOUNTS) return -1;
+    if (!path || !ops || path[0] != '/') return -1;
 
     int len = (int)strlen(path);
     if (len <= 0 || len >= (int)sizeof(mounts[0].path)) return -1;
@@ -37,6 +37,7 @@ int vfs_mount(const char* path, const vfs_ops_t* ops) {
         }
     }
 
+    if (mount_count >= VFS_MAX_MOUNTS) return -1;
     strncpy(mounts[mount_count].path, path, (size_t)len);
     mounts[mount_count].path[len] = '\0';
     mounts[mount_count].ops = ops;
@@ -46,6 +47,38 @@ int vfs_mount(const char* path, const vfs_ops_t* ops) {
 
 int vfs_mount_root(const vfs_ops_t* ops) {
     return vfs_mount("/", ops);
+}
+
+int vfs_umount(const char* path) {
+    if (!path || path[0] != '/' || strcmp(path, "/") == 0) return -1;
+    for (int i = 0; i < mount_count; i++) {
+        if (strcmp(mounts[i].path, path) == 0) {
+            for (int j = i; j < mount_count - 1; j++) mounts[j] = mounts[j + 1];
+            mount_count--;
+            mounts[mount_count].path[0] = '\0';
+            mounts[mount_count].ops = 0;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+static void append(char* buffer, uint32_t* pos, uint32_t max, const char* s) {
+    while (*s && *pos + 1 < max) buffer[(*pos)++] = *s++;
+}
+
+int vfs_get_mounts(char* buffer, uint32_t* size, uint32_t max_size) {
+    if (!buffer || !size || max_size == 0) return -1;
+    uint32_t pos = 0;
+    for (int i = 0; i < mount_count; i++) {
+        append(buffer, &pos, max_size, mounts[i].path);
+        append(buffer, &pos, max_size, " ");
+        append(buffer, &pos, max_size, mounts[i].ops ? mounts[i].ops->name : "none");
+        append(buffer, &pos, max_size, "\n");
+    }
+    buffer[pos < max_size ? pos : max_size - 1] = '\0';
+    *size = pos;
+    return 0;
 }
 
 static const vfs_ops_t* resolve(const char* path, const char** subpath) {

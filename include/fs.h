@@ -24,5 +24,8 @@ int fs_rmdir(const char* name);
 int fs_chdir(const char* name);
 const char* fs_getcwd(void);
 void fs_get_disk_info(uint32_t* total_kb, uint32_t* used_kb, uint32_t* free_kb);
+int fs_mount(const char* type, const char* path);
+int fs_umount(const char* path);
+int fs_mounts(char* buffer, uint32_t* size, uint32_t max_size);
 
 #endif

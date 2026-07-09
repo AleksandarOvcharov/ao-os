@@ -25,6 +25,8 @@ typedef unsigned long uintptr_t;
 #define SYS_WRITE       11
 #define SYS_CLOSE       12
 #define SYS_SETCOLOR    13
+#define SYS_WAITPID     14
+#define SYS_SLEEP       15
 
 // Colors
 enum vga_color {
@@ -92,6 +94,14 @@ static inline int ao_readline(char* buf, uint32_t maxlen) {
 // Process
 static inline void ao_exit(int code) {
     syscall(SYS_EXIT, (uint64_t)code, 0, 0);
+}
+
+static inline int ao_waitpid(int pid, int* status, int options) {
+    return syscall(SYS_WAITPID, (uint64_t)pid, (uintptr_t)status, (uint64_t)options);
+}
+
+static inline void ao_sleep_ticks(uint64_t ticks) {
+    syscall(SYS_SLEEP, ticks, 0, 0);
 }
 
 // System

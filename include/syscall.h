@@ -17,6 +17,8 @@
 #define SYS_WRITE       11
 #define SYS_CLOSE       12
 #define SYS_SETCOLOR    13
+#define SYS_WAITPID     14
+#define SYS_SLEEP       15
 
 void syscall_init(void);
 int  syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3);

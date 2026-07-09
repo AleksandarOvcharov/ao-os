@@ -49,6 +49,7 @@ void vmm_set_cr3(uint64_t cr3);
 /* Create a process address space seeded with kernel mappings.
  * User mappings should be added with vmm_map_page_in(). */
 uint64_t vmm_create_address_space(void);
+void vmm_destroy_address_space(uint64_t cr3);
 uint64_t vmm_get_kernel_cr3(void);
 
 #endif

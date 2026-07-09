@@ -156,11 +156,19 @@ void shell_execute_command(const char* cmd) {
         cmd_diskinfo();
     } else if (strncmp(cmd, "netstat", cmd_len) == 0 && cmd_len == 7) {
         cmd_netstat();
+    } else if (strncmp(cmd, "ping", cmd_len) == 0 && cmd_len == 4) {
+        cmd_ping(args);
     } else if (strncmp(cmd, "sconsole", cmd_len) == 0 && cmd_len == 8) {
         cmd_sconsole(args);
-    } else if (strcmp(cmd, "checkfs") == 0) {
+    } else if (strcmp(exec_cmd, "checkfs") == 0) {
         cmd_checkfs();
-    } else if (strcmp(cmd, "install") == 0) {
+    } else if (strncmp(exec_cmd, "mount", cmd_len) == 0 && cmd_len == 5) {
+        cmd_mount(args);
+    } else if (strncmp(exec_cmd, "umount", cmd_len) == 0 && cmd_len == 6) {
+        cmd_umount(args);
+    } else if (strcmp(exec_cmd, "mounts") == 0) {
+        cmd_mounts();
+    } else if (strcmp(exec_cmd, "install") == 0) {
         cmd_install();
     } else if (strncmp(cmd, "mkdir", cmd_len) == 0 && cmd_len == 5) {
         cmd_mkdir(args);
@@ -220,6 +228,8 @@ void shell_execute_command(const char* cmd) {
         cmd_neofetch();
     } else if (strncmp(cmd, "calc", cmd_len) == 0 && cmd_len == 4) {
         cmd_calc(args);
+    } else if (strncmp(cmd, "waitpid", cmd_len) == 0 && cmd_len == 7) {
+        cmd_waitpid(args);
     } else if (strncmp(exec_cmd, "ps", cmd_len) == 0 && cmd_len == 2) {
         /* List processes */
         process_t* list;
@@ -243,7 +253,7 @@ void shell_execute_command(const char* cmd) {
             /* Pad */
             for (int j = pos; j < 5; j++) terminal_writestring(" ");
             /* State */
-            const char* states[] = {"UNUSED", "READY", "RUNNING", "BLOCKED", "TERMINATED"};
+            const char* states[] = {"UNUSED", "READY", "RUNNING", "BLOCKED", "SLEEPING", "TERMINATED"};
             terminal_writestring(states[list[i].state]);
             int slen = (int)strlen(states[list[i].state]);
             for (int j = slen; j < 12; j++) terminal_writestring(" ");
