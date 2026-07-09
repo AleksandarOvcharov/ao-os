@@ -15,6 +15,8 @@ void cmd_sysinfo(void);
 void cmd_diskinfo(void);
 void cmd_netstat(void);
 void cmd_ping(const char* args);
+void cmd_udp_send(const char* args);
+void cmd_udp_listen(void);
 void cmd_sconsole(const char* args);
 void cmd_ls(void);
 void cmd_cat(const char* args);

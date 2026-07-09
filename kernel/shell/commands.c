@@ -35,6 +35,8 @@ void cmd_help(void) {
     terminal_writestring("  diskinfo - Display disk information\n");
     terminal_writestring("  netstat  - Display network stack status\n");
     terminal_writestring("  ping     - Send ICMP/ARP packet (usage: ping <ipv4>)\n");
+    terminal_writestring("  udp-send - Send UDP packet (usage: udp-send <ip> <port> <text>)\n");
+    terminal_writestring("  udp-listen - Show last received UDP packet\n");
     terminal_writestring("  sconsole - Serial console status (usage: sconsole --status)\n");
     terminal_writestring("  checkfs  - Display current filesystem type\n");
     terminal_writestring("  mount    - Mount pseudo filesystem (usage: mount <type> <path>)\n");
@@ -509,8 +511,14 @@ void cmd_netstat(void) {
     print_uint32(s->packets_tx);
     terminal_writestring("\nRX packets:    ");
     print_uint32(s->packets_rx);
+    terminal_writestring("\nIRQs:          ");
+    print_uint32(s->irq_count);
     terminal_writestring("\nRX errors:     ");
     print_uint32(s->rx_errors);
+    terminal_writestring("\nDropped:       ");
+    print_uint32(s->dropped);
+    terminal_writestring("\nChecksum err:  ");
+    print_uint32(s->checksum_errors);
     terminal_writestring("\nARP entries:   ");
     print_uint32(s->arp_entries);
     terminal_writestring("\n");
@@ -521,6 +529,8 @@ void cmd_netstat(void) {
         terminal_putchar((char)('0' + (s->slot % 10)));
         terminal_writestring(", function ");
         terminal_putchar((char)('0' + (s->function % 10)));
+        terminal_writestring(", irq ");
+        print_uint32(s->irq);
         terminal_writestring("\nVendor:        ");
         print_hex16(s->vendor_id);
         terminal_writestring("\nDevice:        ");
@@ -530,6 +540,42 @@ void cmd_netstat(void) {
         terminal_writestring("\n");
     }
     terminal_writestring("Protocols:     ARP cache, IPv4 dispatch, ICMP echo TX/RX\n");
+}
+
+void cmd_udp_send(const char* args) {
+    if (!args || !*args) {
+        terminal_writestring("Usage: udp-send <ip> <port> <text>\n");
+        return;
+    }
+    char ipbuf[32];
+    int i = 0, j = 0;
+    while (args[i] && args[i] != ' ' && j < (int)sizeof(ipbuf) - 1) ipbuf[j++] = args[i++];
+    ipbuf[j] = '\0';
+    while (args[i] == ' ') i++;
+    uint32_t port = 0;
+    while (args[i] >= '0' && args[i] <= '9') port = port * 10 + (uint32_t)(args[i++] - '0');
+    while (args[i] == ' ') i++;
+    if (!ipbuf[0] || port == 0 || port > 65535 || !args[i]) {
+        terminal_writestring("Usage: udp-send <ip> <port> <text>\n");
+        return;
+    }
+    uint32_t ip = net_parse_ipv4(ipbuf);
+    if (!ip) {
+        terminal_writestring("Invalid IPv4 address\n");
+        return;
+    }
+    uint16_t len = (uint16_t)strlen(&args[i]);
+    int r = net_send_udp(ip, (uint16_t)port, &args[i], len);
+    if (r > 0 || r == 0) terminal_writestring("udp packet queued or ARP requested\n");
+    else terminal_writestring("udp-send failed\n");
+}
+
+void cmd_udp_listen(void) {
+    net_poll();
+    char buffer[512];
+    uint32_t size = 0;
+    if (net_format_udp(buffer, &size, sizeof(buffer)) == 0) terminal_writestring(buffer);
+    else terminal_writestring("udp-listen failed\n");
 }
 
 void cmd_ping(const char* args) {

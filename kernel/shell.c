@@ -158,6 +158,10 @@ void shell_execute_command(const char* cmd) {
         cmd_netstat();
     } else if (strncmp(cmd, "ping", cmd_len) == 0 && cmd_len == 4) {
         cmd_ping(args);
+    } else if (strncmp(cmd, "udp-send", cmd_len) == 0 && cmd_len == 8) {
+        cmd_udp_send(args);
+    } else if (strncmp(cmd, "udp-listen", cmd_len) == 0 && cmd_len == 10) {
+        cmd_udp_listen();
     } else if (strncmp(cmd, "sconsole", cmd_len) == 0 && cmd_len == 8) {
         cmd_sconsole(args);
     } else if (strcmp(exec_cmd, "checkfs") == 0) {

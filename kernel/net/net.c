@@ -3,10 +3,13 @@
 #include "io.h"
 #include "string.h"
 #include "klog.h"
+#include "idt.h"
+#include "timer.h"
 
 #define ETH_TYPE_ARP  0x0806
 #define ETH_TYPE_IPV4 0x0800
 #define IP_PROTO_ICMP 1
+#define IP_PROTO_UDP  17
 
 #define NE_CR     0x00
 #define NE_PSTART 0x01
@@ -34,14 +37,28 @@ static net_status_t status;
 typedef struct {
     uint32_t ip;
     uint8_t mac[6];
+    uint64_t updated;
     int valid;
 } arp_entry_t;
+
+typedef struct {
+    uint32_t src_ip;
+    uint16_t src_port;
+    uint16_t dst_port;
+    uint16_t len;
+    char data[128];
+    int valid;
+} udp_packet_t;
 
 static arp_entry_t arp_cache[8];
 static uint16_t icmp_seq;
 static uint8_t rx_boundary;
 static uint32_t pending_ping_ip;
 static uint16_t pending_ping_seq;
+static udp_packet_t last_udp;
+
+#define ARP_TTL_TICKS 6000
+#define PING_WAIT_SPINS 120000
 
 static uint16_t bswap16(uint16_t v) { return (uint16_t)((v << 8) | (v >> 8)); }
 static uint32_t bswap32(uint32_t v) {
@@ -110,6 +127,15 @@ static void append_mac(char* b, uint32_t* p, uint32_t max, const uint8_t* mac) {
     }
 }
 
+static void expire_arp(void) {
+    uint64_t now = timer_get_ticks();
+    status.arp_entries = 0;
+    for (int i = 0; i < 8; i++) {
+        if (arp_cache[i].valid && now - arp_cache[i].updated > ARP_TTL_TICKS) arp_cache[i].valid = 0;
+        if (arp_cache[i].valid) status.arp_entries++;
+    }
+}
+
 static uint16_t io_base_from_bar(uint32_t bar) {
     return (uint16_t)(bar & ~0x3U);
 }
@@ -126,7 +152,7 @@ static void ne2k_init(uint16_t io) {
     outb(io + NE_PSTOP, NE_RX_STOP);
     outb(io + NE_BNRY, rx_boundary);
     outb(io + NE_ISR, 0xFF);
-    outb(io + NE_IMR, 0x00);
+    outb(io + NE_IMR, 0x1F);
     outb(io + NE_CR, 0x61);
     outb(io + NE_CURR, NE_RX_START + 1);
     for (int i = 0; i < 6; i++) outb(io + 0x01 + i, status.mac[i]);
@@ -154,17 +180,20 @@ void net_init(void) {
         status.bus = devices[i].bus;
         status.slot = devices[i].slot;
         status.function = devices[i].function;
+        status.irq = devices[i].interrupt_line;
 
         if (is_ne2000(devices[i].vendor_id, devices[i].device_id)) {
             status.driver = NET_DRIVER_NE2000;
             status.io_base = io_base_from_bar(devices[i].bar[0]);
             ne2k_init((uint16_t)status.io_base);
+            if (status.irq == 10 || status.irq == 11) idt_unmask_irq(status.irq);
             klog_info("Network device initialized: NE2000");
             return;
         }
         if (is_virtio_net(devices[i].vendor_id, devices[i].device_id)) {
             status.driver = NET_DRIVER_VIRTIO;
             status.io_base = io_base_from_bar(devices[i].bar[0]);
+            if (status.irq == 10 || status.irq == 11) idt_unmask_irq(status.irq);
             klog_info("Network device detected: virtio-net");
             return;
         }
@@ -180,6 +209,17 @@ int net_icmp_init(void) { return status.driver != NET_DRIVER_NONE ? 0 : -1; }
 int net_udp_init(void) { return status.driver != NET_DRIVER_NONE ? 0 : -1; }
 int net_tcp_init(void) { return status.driver != NET_DRIVER_NONE ? 0 : -1; }
 
+void net_irq_handler(uint64_t irq) {
+    if (status.driver != NET_DRIVER_NE2000 || irq != status.irq || !status.io_base) return;
+    uint16_t io = (uint16_t)status.io_base;
+    uint8_t isr = inb(io + NE_ISR);
+    if (!isr) return;
+    outb(io + NE_ISR, isr);
+    status.irq_count++;
+    if (isr & 0x15) net_poll();
+    if (isr & 0x10) status.rx_errors++;
+}
+
 static void arp_cache_put(uint32_t ip, const uint8_t* mac) {
     int slot = -1;
     for (int i = 0; i < 8; i++) {
@@ -189,6 +229,7 @@ static void arp_cache_put(uint32_t ip, const uint8_t* mac) {
     if (slot < 0) slot = 0;
     arp_cache[slot].ip = ip;
     memcpy(arp_cache[slot].mac, mac, 6);
+    arp_cache[slot].updated = timer_get_ticks();
     arp_cache[slot].valid = 1;
     status.arp_entries = 0;
     for (int i = 0; i < 8; i++) if (arp_cache[i].valid) status.arp_entries++;
@@ -280,6 +321,7 @@ int net_receive_packet(uint8_t* data, uint16_t* len) {
 }
 
 static arp_entry_t* arp_lookup(uint32_t ip) {
+    expire_arp();
     for (int i = 0; i < 8; i++) if (arp_cache[i].valid && arp_cache[i].ip == ip) return &arp_cache[i];
     return 0;
 }
@@ -323,11 +365,13 @@ int net_ping_ipv4(uint32_t ip) {
     if (!e) {
         status.last_ping_ip = ip;
         status.last_ping_ok = 0;
-        if (send_arp_request(ip) != 0) return -1;
-        for (uint32_t spin = 0; spin < 200000; spin++) {
-            net_poll();
-            e = arp_lookup(ip);
-            if (e) break;
+        for (int attempt = 0; attempt < 3 && !e; attempt++) {
+            if (send_arp_request(ip) != 0) return -1;
+            for (uint32_t spin = 0; spin < PING_WAIT_SPINS; spin++) {
+                net_poll();
+                e = arp_lookup(ip);
+                if (e) break;
+            }
         }
         if (!e) return 0;
     }
@@ -352,11 +396,12 @@ int net_ping_ipv4(uint32_t ip) {
     pending_ping_seq = ++icmp_seq;
     status.last_ping_ip = ip;
     status.last_ping_ok = 0;
+    status.last_ping_seq = pending_ping_seq;
     *(uint16_t*)(icmp + 6) = bswap16(pending_ping_seq);
     memcpy(icmp + 8, "AO-OS-PING-0000", 16);
     *(uint16_t*)(icmp + 2) = checksum(icmp, 8 + 16);
     if (net_send_packet(p, sizeof(p)) != 0) return -1;
-    for (uint32_t spin = 0; spin < 300000; spin++) {
+    for (uint32_t spin = 0; spin < PING_WAIT_SPINS * 3; spin++) {
         net_poll();
         if (status.last_ping_ok) return 1;
     }
@@ -399,19 +444,35 @@ static void handle_ipv4(const uint8_t* frame, uint16_t len) {
     uint8_t ihl = (uint8_t)((ip[0] & 0x0F) * 4);
     if (ihl < 20 || len < 14 + ihl) return;
     uint16_t total = bswap16(*(const uint16_t*)(ip + 2));
-    if (14 + total > len || ip[9] != IP_PROTO_ICMP) return;
+    if (14 + total > len) { status.dropped++; return; }
+    if (checksum(ip, ihl) != 0) { status.checksum_errors++; return; }
     uint32_t src = bswap32(*(const uint32_t*)(ip + 12));
     uint32_t dst = bswap32(*(const uint32_t*)(ip + 16));
     if (dst != LOCAL_IP) return;
-    const uint8_t* icmp = ip + ihl;
-    uint16_t icmp_len = total - ihl;
-    if (icmp_len < 8) return;
     arp_cache_put(src, frame + 6);
-    if (icmp[0] == 8) {
-        send_icmp_echo_reply(frame, len);
-    } else if (icmp[0] == 0) {
-        uint16_t seq = bswap16(*(const uint16_t*)(icmp + 6));
-        if (src == pending_ping_ip && seq == pending_ping_seq) status.last_ping_ok = 1;
+    if (ip[9] == IP_PROTO_ICMP) {
+        const uint8_t* icmp = ip + ihl;
+        uint16_t icmp_len = total - ihl;
+        if (icmp_len < 8) { status.dropped++; return; }
+        if (checksum(icmp, icmp_len) != 0) { status.checksum_errors++; return; }
+        if (icmp[0] == 8) {
+            send_icmp_echo_reply(frame, len);
+        } else if (icmp[0] == 0) {
+            uint16_t seq = bswap16(*(const uint16_t*)(icmp + 6));
+            if (src == pending_ping_ip && seq == pending_ping_seq) status.last_ping_ok = 1;
+        }
+    } else if (ip[9] == IP_PROTO_UDP) {
+        const uint8_t* udp = ip + ihl;
+        uint16_t udp_len = total - ihl;
+        if (udp_len < 8) { status.dropped++; return; }
+        last_udp.src_ip = src;
+        last_udp.src_port = bswap16(*(const uint16_t*)udp);
+        last_udp.dst_port = bswap16(*(const uint16_t*)(udp + 2));
+        last_udp.len = udp_len - 8;
+        if (last_udp.len > sizeof(last_udp.data) - 1) last_udp.len = sizeof(last_udp.data) - 1;
+        memcpy(last_udp.data, udp + 8, last_udp.len);
+        last_udp.data[last_udp.len] = '\0';
+        last_udp.valid = 1;
     }
 }
 
@@ -425,6 +486,7 @@ int net_poll(void) {
         uint16_t type = bswap16(*(uint16_t*)(frame + 12));
         if (type == ETH_TYPE_ARP) handle_arp(frame, len);
         else if (type == ETH_TYPE_IPV4) handle_ipv4(frame, len);
+        else status.dropped++;
         handled++;
     }
     return handled;
@@ -439,6 +501,8 @@ int net_format_arp_cache(char* buffer, uint32_t* size, uint32_t max_size) {
         append_ip(buffer, &pos, max_size, arp_cache[i].ip);
         append_str(buffer, &pos, max_size, " ");
         append_mac(buffer, &pos, max_size, arp_cache[i].mac);
+        append_str(buffer, &pos, max_size, " age=");
+        append_u32(buffer, &pos, max_size, (uint32_t)(timer_get_ticks() - arp_cache[i].updated));
         append_str(buffer, &pos, max_size, "\n");
     }
     buffer[pos < max_size ? pos : max_size - 1] = '\0';
@@ -449,7 +513,7 @@ int net_format_arp_cache(char* buffer, uint32_t* size, uint32_t max_size) {
 int net_format_device_stats(char* buffer, uint32_t* size, uint32_t max_size) {
     if (!buffer || !size || max_size == 0) return -1;
     uint32_t pos = 0;
-    append_str(buffer, &pos, max_size, "iface driver rx tx rxerr mac\n");
+    append_str(buffer, &pos, max_size, "iface driver rx tx irq rxerr drop csum mac\n");
     append_str(buffer, &pos, max_size, "eth0 ");
     append_str(buffer, &pos, max_size, net_driver_name(status.driver));
     append_str(buffer, &pos, max_size, " ");
@@ -457,10 +521,73 @@ int net_format_device_stats(char* buffer, uint32_t* size, uint32_t max_size) {
     append_str(buffer, &pos, max_size, " ");
     append_u32(buffer, &pos, max_size, status.packets_tx);
     append_str(buffer, &pos, max_size, " ");
+    append_u32(buffer, &pos, max_size, status.irq_count);
+    append_str(buffer, &pos, max_size, " ");
     append_u32(buffer, &pos, max_size, status.rx_errors);
+    append_str(buffer, &pos, max_size, " ");
+    append_u32(buffer, &pos, max_size, status.dropped);
+    append_str(buffer, &pos, max_size, " ");
+    append_u32(buffer, &pos, max_size, status.checksum_errors);
     append_str(buffer, &pos, max_size, " ");
     append_mac(buffer, &pos, max_size, status.mac);
     append_str(buffer, &pos, max_size, "\n");
+    buffer[pos < max_size ? pos : max_size - 1] = '\0';
+    *size = pos;
+    return 0;
+}
+
+int net_send_udp(uint32_t ip, uint16_t port, const char* data, uint16_t len) {
+    if (!data || len > 256 || status.driver == NET_DRIVER_NONE) return -1;
+    net_poll();
+    arp_entry_t* e = arp_lookup(ip);
+    if (!e) {
+        if (send_arp_request(ip) != 0) return -1;
+        for (uint32_t spin = 0; spin < PING_WAIT_SPINS; spin++) {
+            net_poll();
+            e = arp_lookup(ip);
+            if (e) break;
+        }
+    }
+    if (!e) return 0;
+    uint16_t udp_len = (uint16_t)(8 + len);
+    uint16_t ip_len = (uint16_t)(20 + udp_len);
+    uint8_t p[14 + 20 + 8 + 256];
+    memset(p, 0, sizeof(p));
+    memcpy(p, e->mac, 6);
+    memcpy(p + 6, status.mac, 6);
+    *(uint16_t*)(p + 12) = bswap16(ETH_TYPE_IPV4);
+    uint8_t* iphdr = p + 14;
+    iphdr[0] = 0x45;
+    *(uint16_t*)(iphdr + 2) = bswap16(ip_len);
+    iphdr[8] = 64;
+    iphdr[9] = IP_PROTO_UDP;
+    *(uint32_t*)(iphdr + 12) = bswap32(LOCAL_IP);
+    *(uint32_t*)(iphdr + 16) = bswap32(ip);
+    *(uint16_t*)(iphdr + 10) = checksum(iphdr, 20);
+    uint8_t* udp = iphdr + 20;
+    *(uint16_t*)(udp + 0) = bswap16(49152);
+    *(uint16_t*)(udp + 2) = bswap16(port);
+    *(uint16_t*)(udp + 4) = bswap16(udp_len);
+    memcpy(udp + 8, data, len);
+    return net_send_packet(p, (uint16_t)(14 + ip_len));
+}
+
+int net_format_udp(char* buffer, uint32_t* size, uint32_t max_size) {
+    if (!buffer || !size || max_size == 0) return -1;
+    uint32_t pos = 0;
+    if (!last_udp.valid) {
+        append_str(buffer, &pos, max_size, "no udp packets\n");
+    } else {
+        append_str(buffer, &pos, max_size, "src=");
+        append_ip(buffer, &pos, max_size, last_udp.src_ip);
+        append_str(buffer, &pos, max_size, ":");
+        append_u32(buffer, &pos, max_size, last_udp.src_port);
+        append_str(buffer, &pos, max_size, " dst=");
+        append_u32(buffer, &pos, max_size, last_udp.dst_port);
+        append_str(buffer, &pos, max_size, " data=");
+        append_str(buffer, &pos, max_size, last_udp.data);
+        append_str(buffer, &pos, max_size, "\n");
+    }
     buffer[pos < max_size ? pos : max_size - 1] = '\0';
     *size = pos;
     return 0;

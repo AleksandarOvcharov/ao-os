@@ -20,8 +20,10 @@ All notable changes to AO OS will be documented in this file.
 - `/proc` pseudo-filesystem with `/proc/processes`
 - `/dev` pseudo-filesystem with `/dev/null` and `/dev/zero`
 - `mount`, `umount`, and `mounts` shell commands
-- `netstat` shell command, NE2000-compatible TX path, polling RX path, ARP cache/request/reply handling, IPv4 dispatch, and ICMP echo transmit/reply handling via `ping`
-- `/proc/net/arp` and `/proc/net/dev` network observability files
+- `netstat` shell command, NE2000-compatible TX path, IRQ-driven RX path, ARP cache/request/reply handling, IPv4 dispatch, and ICMP echo transmit/reply handling via `ping`
+- ARP entry expiry/retry, IPv4/ICMP checksum validation, packet drop diagnostics, and ping sequence tracking
+- Basic UDP receive dispatch with `udp-send` and `udp-listen` shell test tools
+- `/proc/net/arp`, `/proc/net/dev`, and `/proc/net/udp` network observability files
 - Installer selection for FAT12, FAT16, or FAT32 with capacity-aware layout generation
 - FAT32 root cluster, FSInfo, backup boot metadata, and mirrored FAT handling
 - `make test-fat` host integration suite using the production FAT driver with a file-backed ATA adapter

@@ -50,6 +50,8 @@ extern void isr21(void);
 /* IRQ handlers from interrupt.asm */
 extern void irq0_handler(void);
 extern void irq1_handler(void);
+extern void irq10_handler(void);
+extern void irq11_handler(void);
 extern void syscall_handler(void);
 
 static void pic_remap(void) {
@@ -64,6 +66,21 @@ static void pic_remap(void) {
     /* Enable IRQ0 (timer) and IRQ1 (keyboard), mask others */
     outb(0x21, 0xFC);  /* 11111100 = IRQ0+IRQ1 enabled */
     outb(0xA1, 0xFF);
+}
+
+void idt_unmask_irq(uint8_t irq) {
+    if (irq < 8) {
+        uint8_t mask = inb(0x21);
+        mask &= (uint8_t)~(1 << irq);
+        outb(0x21, mask);
+    } else if (irq < 16) {
+        uint8_t mask = inb(0xA1);
+        mask &= (uint8_t)~(1 << (irq - 8));
+        outb(0xA1, mask);
+        mask = inb(0x21);
+        mask &= (uint8_t)~(1 << 2);
+        outb(0x21, mask);
+    }
 }
 
 void idt_init(void) {
@@ -102,6 +119,8 @@ void idt_init(void) {
     /* Hardware IRQ Handlers (remapped to INT 32+) */
     idt_set_gate(32,   (uint64_t)(uintptr_t)irq0_handler,   0x08, 0x8E); /* Timer */
     idt_set_gate(33,   (uint64_t)(uintptr_t)irq1_handler,   0x08, 0x8E); /* Keyboard */
+    idt_set_gate(42,   (uint64_t)(uintptr_t)irq10_handler,  0x08, 0x8E); /* PCI */
+    idt_set_gate(43,   (uint64_t)(uintptr_t)irq11_handler,  0x08, 0x8E); /* PCI */
 
     /* Syscall (int 0x80) - DPL=3 so user programs can invoke it */
     idt_set_gate(0x80, (uint64_t)(uintptr_t)syscall_handler, 0x08, 0xEE);

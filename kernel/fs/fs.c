@@ -78,6 +78,7 @@ static int proc_read(const char* path, char* buffer, uint32_t* size) {
     if (!path) return -1;
     if (strcmp(path, "net/arp") == 0) return net_format_arp_cache(buffer, size, FS_MAX_FILESIZE);
     if (strcmp(path, "net/dev") == 0) return net_format_device_stats(buffer, size, FS_MAX_FILESIZE);
+    if (strcmp(path, "net/udp") == 0) return net_format_udp(buffer, size, FS_MAX_FILESIZE);
     if (strcmp(path, "processes") != 0) return -1;
     uint32_t pos = 0;
     process_t* list = 0;

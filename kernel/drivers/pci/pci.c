@@ -39,6 +39,7 @@ static void pci_read_device(uint8_t bus, uint8_t slot, uint8_t function) {
     d->prog_if = (uint8_t)((classreg >> 8) & 0xFF);
     d->subclass = (uint8_t)((classreg >> 16) & 0xFF);
     d->class_code = (uint8_t)((classreg >> 24) & 0xFF);
+    d->interrupt_line = (uint8_t)(pci_config_read32(bus, slot, function, 0x3C) & 0xFF);
 
     for (int i = 0; i < 6; i++) {
         d->bar[i] = pci_config_read32(bus, slot, function, (uint8_t)(0x10 + i * 4));

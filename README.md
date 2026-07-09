@@ -17,7 +17,7 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - **AOB + ELF Executables**: Custom AOB binaries and ELF64 `ET_EXEC` user programs with syscall API
 - **Per-Process Page Tables**: User processes run with private CR3 address spaces and isolated user pages
 - **VFS + Block Cache**: FAT/RAMFS are mounted through a VFS mount table with cached sector I/O for FAT
-- **PCI + Networking**: PCI scan, NE2000 TX/RX polling, ARP cache, IPv4 dispatch, and ICMP ping path
+- **PCI + Networking**: PCI scan, IRQ-driven NE2000 RX, ARP cache, IPv4 dispatch, ICMP ping, and basic UDP tools
 - **40+ Shell Commands**: File operations, directory navigation, text editor, system tools, process management (`ps`, `kill`)
 - **Interactive Shell**: Command history, colored prompts, working directory display
 - Serial console output for debugging (COM1)
@@ -165,6 +165,7 @@ ao-os/
 - `diskinfo` - Display disk controller information
 - `netstat` - Display PCI/network stack status
 - `ping <ipv4>` - Send an ARP request or ICMP echo packet through the network stack
+- `udp-send <ip> <port> <text>` / `udp-listen` - Send UDP text and display the last received UDP packet
 - `sconsole --status` - Display serial console status
 - `ls` - List files and directories in the active filesystem
 - `cat <filename>` - Display file contents
@@ -217,17 +218,17 @@ AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
 - Process cleanup frees private user pages and private page-table hierarchy pages; full parent/child ownership tracking is still basic
 - FAT creation currently uses 8.3 names; LFN creation and permissions are not supported
 - VFS has mount/umount commands, `/proc`, and `/dev`, but lacks per-mount CWD tracking and persistent multi-disk mount configuration
-- Network code supports NE2000 polling RX/TX, ARP cache/replies, IPv4 dispatch, and ICMP echo handling; IRQ-driven RX, routing, UDP, TCP, and virtio-net data path are not complete yet
+- Network code supports IRQ-driven NE2000 RX/TX, ARP cache/retries/expiry, IPv4 dispatch, ICMP echo handling, and basic UDP send/receive; routing, TCP, and virtio-net data path are not complete yet
 - ELF support is limited to static ELF64 `ET_EXEC` load segments; no dynamic linker yet
 - No inter-process communication (IPC)
 - No signals or asynchronous event delivery
 
 ## Roadmap
 
-- [ ] IRQ-driven NE2000 receive path instead of polling-only RX
 - [ ] virtio-net TX/RX data path
-- [ ] IPv4 routing table, UDP, and TCP implementations
-- [ ] More complete ping diagnostics, packet timeouts, and error reporting
+- [ ] IPv4 routing table and TCP implementation
+- [ ] More complete UDP sockets and multi-listener dispatch
+- [ ] Better packet timeout tuning and interrupt diagnostics
 - [ ] Multiple physical block-device mounting under `/mnt`
 - [ ] Parent/child process ownership and richer zombie accounting
 - [ ] ELF relocation, PIE, and dynamic linking support

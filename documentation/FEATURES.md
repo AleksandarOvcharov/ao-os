@@ -172,11 +172,13 @@
   - Ethernet-class device detection
   - NE2000 (`10ec:8029`) and virtio-net (`1af4:*`) recognition
   - `netstat` shell command for stack/device status
-  - NE2000-compatible packet transmit and polling receive path
-  - ARP cache, ARP request/reply handling, IPv4 dispatch, and ICMP echo request/reply handling
-  - `ping <ipv4>` sends ARP as needed, sends ICMP echo, polls RX, and reports reply/timeout
-  - `/proc/net/arp` and `/proc/net/dev` expose network observability
-  - IRQ-driven RX, routing, UDP, TCP, and virtio-net data path remain planned
+  - NE2000-compatible packet transmit and IRQ-driven receive path
+  - ARP cache with expiry/retry, ARP request/reply handling, IPv4 dispatch, and ICMP echo request/reply handling
+  - IPv4 and ICMP checksum validation plus packet-drop diagnostics
+  - `ping <ipv4>` sends ARP as needed, sends ICMP echo, and reports reply/timeout
+  - Basic UDP receive dispatch plus `udp-send` and `udp-listen` test tools
+  - `/proc/net/arp`, `/proc/net/dev`, and `/proc/net/udp` expose network observability
+  - Routing, TCP, and virtio-net data path remain planned
 
 ### Input
 - **Keyboard Driver**: PS/2 keyboard with interrupt-driven input (IRQ1)
@@ -281,8 +283,7 @@
 - [ ] Shell piping and redirection (`|`, `>`, `<`)
 - [ ] Shell scripting / batch files
 - [ ] ELF userland examples and build recipe
-- [ ] IRQ-driven NE2000 receive path
-- [ ] Better ping timeout/error diagnostics
+- [ ] Better packet timeout tuning and interrupt diagnostics
 
 ### Medium Term
 - [ ] Multiple virtual terminals
@@ -290,10 +291,11 @@
 - [ ] ELF relocation, PIE, and dynamic linking support
 - [ ] virtio-net TX/RX data path
 - [ ] Persistent multi-disk mount configuration
+- [ ] More complete UDP sockets and multi-listener dispatch
 
 ### Long Term
 - [ ] IPC mechanisms (pipes, shared memory)
-- [ ] IPv4 routing table, UDP, and TCP implementations
+- [ ] IPv4 routing table and TCP implementation
 - [ ] Graphics mode support (VESA framebuffer)
 - [ ] EXT2 or another second on-disk filesystem backend
 

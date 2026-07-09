@@ -198,6 +198,48 @@ irq1_handler:
     pop rax
     iretq
 
+; PCI/network IRQ handlers (IRQ10/IRQ11 mapped to INT 42/43)
+extern net_irq_handler
+
+%macro IRQ_SLAVE_HANDLER 2
+global %1
+%1:
+    push rax
+    push rbx
+    push rcx
+    push rdx
+    push rsi
+    push rdi
+    push rbp
+    push r8
+    push r9
+    push r10
+    push r11
+
+    mov rdi, %2
+    call net_irq_handler
+
+    mov al, 0x20
+    out 0xA0, al
+    out 0x20, al
+
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rbp
+    pop rdi
+    pop rsi
+    pop rdx
+    pop rcx
+    pop rbx
+    pop rax
+    iretq
+%endmacro
+
+IRQ_SLAVE_HANDLER irq10_handler, 10
+IRQ_SLAVE_HANDLER irq11_handler, 11
+
 ; ─── Syscall handler (int 0x80) ─────────────────────────────────────────────
 ; rax = syscall number
 ; rbx = arg1, rcx = arg2, rdx = arg3
