@@ -38,6 +38,7 @@ void process_init(void) {
     p->kernel_rsp = 0;
     p->cr3 = vmm_get_cr3();
     p->exit_code = 0;
+    p->detached = 0;
     p->user_page_count = 0;
 
     current_process = p;
@@ -196,6 +197,7 @@ process_t* process_create(const char* name, uint64_t entry_point, int is_user) {
         return 0;
     }
     p->exit_code = 0;
+    p->detached = 0;
     p->user_page_count = 0;
 
     /* Set up kernel stack */
@@ -279,6 +281,25 @@ void process_wait(uint64_t pid) {
     /* Clean up terminated process */
     process_cleanup(target);
     target->state = PROC_UNUSED;
+}
+
+void process_detach(uint64_t pid) {
+    process_t* p = process_get(pid);
+    if (p && p->pid != 0) p->detached = 1;
+}
+
+int process_reap_terminated(void) {
+    int reaped = 0;
+    for (int i = 1; i < MAX_PROCESSES; i++) {
+        if (processes[i].state == PROC_TERMINATED && processes[i].detached) {
+            process_cleanup(&processes[i]);
+            processes[i].state = PROC_UNUSED;
+            processes[i].pid = 0;
+            processes[i].detached = 0;
+            reaped++;
+        }
+    }
+    return reaped;
 }
 
 void process_terminate(uint64_t pid) {

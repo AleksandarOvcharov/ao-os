@@ -15,6 +15,8 @@
 #include "syscall.h"
 #include "installer.h"
 #include "process.h"
+#include "pci.h"
+#include "net.h"
 
 /* Boot flag written by stage2 bootloader at physical 0x7000:
  *   0x00 = normal boot
@@ -64,6 +66,14 @@ void kernel_main(void) {
     klog_info("Initializing ATA disk driver...");
     ata_init();
     timer_wait(30);
+
+    klog_info("Scanning PCI bus...");
+    pci_init();
+    timer_wait(10);
+
+    klog_info("Initializing network stack...");
+    net_init();
+    timer_wait(10);
 
     klog_info("Initializing filesystem...");
     fs_init();

@@ -34,5 +34,6 @@ typedef struct {
 } __attribute__((packed)) elf64_phdr_t;
 
 int elf_execute(const char* filename, const char* cmdline);
+int elf_spawn(const char* filename, const char* cmdline, int background);
 
 #endif

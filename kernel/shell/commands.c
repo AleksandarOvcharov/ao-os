@@ -16,6 +16,7 @@
 #include "keyboard.h"
 #include "aob.h"
 #include "rtc.h"
+#include "net.h"
 
 void cmd_help(void) {
     uint8_t old_color = vga_entry_color(VGA_COLOR_LIGHT_CYAN, VGA_COLOR_BLACK);
@@ -31,6 +32,7 @@ void cmd_help(void) {
     terminal_writestring("  kernel   - Kernel information (usage: kernel -v or --version)\n");
     terminal_writestring("  sysinfo  - Display system information\n");
     terminal_writestring("  diskinfo - Display disk information\n");
+    terminal_writestring("  netstat  - Display network stack status\n");
     terminal_writestring("  sconsole - Serial console status (usage: sconsole --status)\n");
     terminal_writestring("  checkfs  - Display current filesystem type\n");
     terminal_writestring("  install  - Install AO OS to disk\n");
@@ -61,6 +63,7 @@ void cmd_help(void) {
     terminal_writestring("  calc     - Calculator (usage: calc 10 + 3)\n");
     terminal_writestring("  ps       - List running processes\n");
     terminal_writestring("  kill     - Terminate a process (usage: kill <pid>)\n");
+    terminal_writestring("  reap     - Clean up finished background processes\n");
     terminal_writestring("  color    - Change text color (usage: color <foreground>)\n");
     terminal_writestring("  reboot   - Restart the computer\n");
     terminal_writestring("  shutdown - Shutdown the computer\n");
@@ -68,6 +71,7 @@ void cmd_help(void) {
     terminal_writestring("Executables:\n");
     terminal_writestring("  *.aob    - Run AOB executable (e.g., hello.aob)\n");
     terminal_writestring("  *.elf    - Run ELF64 executable (ET_EXEC)\n");
+    terminal_writestring("  &        - Append to *.aob/*.elf to run in background\n");
     terminal_writestring("  *.bin    - Run raw binary (e.g., hello.bin)\n");
     
     terminal_writestring("\nAvailable colors:\n");
@@ -479,6 +483,35 @@ void cmd_diskinfo(void) {
     terminal_writestring("========================================\n");
     
     terminal_setcolor(label_color);
+}
+
+static void print_hex16(uint16_t v) {
+    const char* h = "0123456789ABCDEF";
+    terminal_writestring("0x");
+    for (int i = 12; i >= 0; i -= 4) terminal_putchar(h[(v >> i) & 0xF]);
+}
+
+void cmd_netstat(void) {
+    const net_status_t* s = net_get_status();
+    terminal_writestring("Network stack: ");
+    terminal_writestring(s->initialized ? "initialized\n" : "not initialized\n");
+    terminal_writestring("Driver:        ");
+    terminal_writestring(net_driver_name(s->driver));
+    terminal_writestring("\n");
+    if (s->driver != NET_DRIVER_NONE) {
+        terminal_writestring("PCI:           bus ");
+        terminal_putchar((char)('0' + (s->bus % 10)));
+        terminal_writestring(", slot ");
+        terminal_putchar((char)('0' + (s->slot % 10)));
+        terminal_writestring(", function ");
+        terminal_putchar((char)('0' + (s->function % 10)));
+        terminal_writestring("\nVendor:        ");
+        print_hex16(s->vendor_id);
+        terminal_writestring("\nDevice:        ");
+        print_hex16(s->device_id);
+        terminal_writestring("\n");
+    }
+    terminal_writestring("Protocols:     ARP/IPv4/ICMP/UDP/TCP skeleton loaded\n");
 }
 
 void cmd_sconsole(const char* args) {

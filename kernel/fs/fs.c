@@ -56,10 +56,13 @@ void fs_init(void) {
     if (fat_available()) {
         fat_ops.name = fatfs_name();
         vfs_mount_root(&fat_ops);
+        ramfs_init();
+        vfs_mount("/dev", &ramfs_ops);
         klog_info("VFS mounted FAT root filesystem");
     } else {
         ramfs_init();
         vfs_mount_root(&ramfs_ops);
+        vfs_mount("/dev", &ramfs_ops);
         klog_info("VFS mounted ramfs root filesystem");
     }
 }

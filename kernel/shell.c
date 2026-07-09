@@ -118,13 +118,28 @@ void shell_execute_command(const char* cmd) {
     if (strlen(cmd) == 0) {
         return;
     }
-    
-    char* space = (char*)cmd;
+
+    process_reap_terminated();
+
+    char exec_cmd[MAX_COMMAND_LENGTH];
+    strncpy(exec_cmd, cmd, MAX_COMMAND_LENGTH - 1);
+    exec_cmd[MAX_COMMAND_LENGTH - 1] = '\0';
+
+    int background = 0;
+    size_t exec_len = strlen(exec_cmd);
+    while (exec_len > 0 && exec_cmd[exec_len - 1] == ' ') exec_cmd[--exec_len] = '\0';
+    if (exec_len > 0 && exec_cmd[exec_len - 1] == '&') {
+        background = 1;
+        exec_cmd[--exec_len] = '\0';
+        while (exec_len > 0 && exec_cmd[exec_len - 1] == ' ') exec_cmd[--exec_len] = '\0';
+    }
+
+    char* space = exec_cmd;
     while (*space && *space != ' ') space++;
-    
-    size_t cmd_len = space - cmd;
+
+    size_t cmd_len = space - exec_cmd;
     const char* args = (*space) ? space + 1 : "";
-    
+
     if (strncmp(cmd, "help", cmd_len) == 0 && cmd_len == 4) {
         cmd_help();
     } else if (strncmp(cmd, "clear", cmd_len) == 0 && cmd_len == 5) {
@@ -139,6 +154,8 @@ void shell_execute_command(const char* cmd) {
         cmd_sysinfo();
     } else if (strncmp(cmd, "diskinfo", cmd_len) == 0 && cmd_len == 8) {
         cmd_diskinfo();
+    } else if (strncmp(cmd, "netstat", cmd_len) == 0 && cmd_len == 7) {
+        cmd_netstat();
     } else if (strncmp(cmd, "sconsole", cmd_len) == 0 && cmd_len == 8) {
         cmd_sconsole(args);
     } else if (strcmp(cmd, "checkfs") == 0) {
@@ -203,7 +220,7 @@ void shell_execute_command(const char* cmd) {
         cmd_neofetch();
     } else if (strncmp(cmd, "calc", cmd_len) == 0 && cmd_len == 4) {
         cmd_calc(args);
-    } else if (strncmp(cmd, "ps", cmd_len) == 0 && cmd_len == 2) {
+    } else if (strncmp(exec_cmd, "ps", cmd_len) == 0 && cmd_len == 2) {
         /* List processes */
         process_t* list;
         int max = process_list(&list);
@@ -235,7 +252,14 @@ void shell_execute_command(const char* cmd) {
             if (list[i].is_user) terminal_writestring(" [user]");
             terminal_writestring("\n");
         }
-    } else if (strncmp(cmd, "kill", cmd_len) == 0 && cmd_len == 4) {
+    } else if (strncmp(exec_cmd, "reap", cmd_len) == 0 && cmd_len == 4) {
+        int n = process_reap_terminated();
+        terminal_writestring("Reaped ");
+        char b[16]; int i = 0; if (n == 0) b[i++] = '0'; else { char t[16]; int j=0; while(n>0){t[j++]=(char)('0'+(n%10)); n/=10;} while(j>0)b[i++]=t[--j]; }
+        b[i] = '\0';
+        terminal_writestring(b);
+        terminal_writestring(" background processes\n");
+    } else if (strncmp(exec_cmd, "kill", cmd_len) == 0 && cmd_len == 4) {
         if (strlen(args) == 0) {
             terminal_writestring("Usage: kill <pid>\n");
         } else {
@@ -251,15 +275,21 @@ void shell_execute_command(const char* cmd) {
         }
     } else {
         // Check if command ends with .aob (AOB executable)
-        if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".aob", 4) == 0) {
+        if (cmd_len > 4 && strncmp(exec_cmd + cmd_len - 4, ".aob", 4) == 0) {
             // Execute AOB binary
             aob_context_t ctx;
             char filename[256];
-            memcpy(filename, cmd, cmd_len);
+            memcpy(filename, exec_cmd, cmd_len);
             filename[cmd_len] = '\0';
-            
+
             if (aob_load(filename, &ctx) == 0) {
-                aob_execute(&ctx, cmd);
+                int r = aob_spawn(&ctx, exec_cmd, background);
+                if (background && r > 0) {
+                    terminal_writestring("[bg] started pid ");
+                    char b[16]; int n=r,i=0; char t[16]; int j=0; while(n>0){t[j++]=(char)('0'+(n%10)); n/=10;} while(j>0)b[i++]=t[--j]; b[i]='\0';
+                    terminal_writestring(b);
+                    terminal_writestring("\n");
+                }
                 aob_unload(&ctx);
             } else {
                 uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
@@ -269,12 +299,18 @@ void shell_execute_command(const char* cmd) {
                 terminal_writestring("\n");
                 terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
             }
-        } else if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".elf", 4) == 0) {
+        } else if (cmd_len > 4 && strncmp(exec_cmd + cmd_len - 4, ".elf", 4) == 0) {
             char filename[256];
-            memcpy(filename, cmd, cmd_len);
+            memcpy(filename, exec_cmd, cmd_len);
             filename[cmd_len] = '\0';
 
-            if (elf_execute(filename, cmd) != 0) {
+            int r = elf_spawn(filename, exec_cmd, background);
+            if (background && r > 0) {
+                terminal_writestring("[bg] started pid ");
+                char b[16]; int n=r,i=0; char t[16]; int j=0; while(n>0){t[j++]=(char)('0'+(n%10)); n/=10;} while(j>0)b[i++]=t[--j]; b[i]='\0';
+                terminal_writestring(b);
+                terminal_writestring("\n");
+            } else if (r != 0) {
                 uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
                 terminal_setcolor(error_color);
                 terminal_writestring("Error: Failed to load or execute ");
@@ -282,10 +318,10 @@ void shell_execute_command(const char* cmd) {
                 terminal_writestring("\n");
                 terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
             }
-        } else if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".bin", 4) == 0) {
+        } else if (cmd_len > 4 && strncmp(exec_cmd + cmd_len - 4, ".bin", 4) == 0) {
             // Execute raw binary
             char filename[256];
-            memcpy(filename, cmd, cmd_len);
+            memcpy(filename, exec_cmd, cmd_len);
             filename[cmd_len] = '\0';
             
             static char bin_buffer[16384];
@@ -298,7 +334,7 @@ void shell_execute_command(const char* cmd) {
                     char* exec_addr = (char*)0x00200000;
                     memcpy(exec_addr, bin_buffer, file_size);
                     // Write argc/argv to 0x00091000
-                    shell_setup_args(cmd);
+                    shell_setup_args(exec_cmd);
                     void (*entry_func)(void) = (void (*)(void))exec_addr;
                     entry_func();
                 } else {
@@ -319,7 +355,7 @@ void shell_execute_command(const char* cmd) {
             uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
             terminal_setcolor(error_color);
             terminal_writestring("Unknown command: ");
-            terminal_writestring(cmd);
+            terminal_writestring(exec_cmd);
             terminal_writestring("\n");
             terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
             terminal_writestring("Type 'help' for available commands.\n");

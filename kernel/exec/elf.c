@@ -49,7 +49,7 @@ static int valid_user_range(uint64_t vaddr, uint64_t size) {
     return 1;
 }
 
-int elf_execute(const char* filename, const char* cmdline) {
+int elf_spawn(const char* filename, const char* cmdline, int background) {
     if (!filename) return -1;
 
     uint32_t file_size = 0;
@@ -120,6 +120,15 @@ int elf_execute(const char* filename, const char* cmdline) {
     process_write_user(proc, USER_API_BASE, api, sizeof(api));
     process_setup_user_args(proc, cmdline ? cmdline : filename);
 
+    if (background) {
+        process_detach(proc->pid);
+        return (int)proc->pid;
+    }
+
     process_wait(proc->pid);
     return 0;
+}
+
+int elf_execute(const char* filename, const char* cmdline) {
+    return elf_spawn(filename, cmdline, 0);
 }

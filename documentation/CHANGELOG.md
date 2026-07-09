@@ -10,7 +10,11 @@ All notable changes to AO OS will be documented in this file.
 - Per-process user address spaces with private CR3 values, private user pages, and scheduler CR3 switching
 - ELF64 `ET_EXEC` loader for static executable load segments
 - VFS root dispatcher with FAT and RAMFS backend operations
+- VFS mount table with longest-prefix path dispatch and `/dev` ramfs mount
 - Write-through sector block cache for FAT disk I/O
+- Detached background `.aob`/`.elf` jobs via shell `&`, plus background process reaping
+- PCI bus scanner and network bootstrap with NE2000/virtio-net detection
+- `netstat` shell command and ARP/IPv4/ICMP/UDP/TCP initialization skeletons
 - Installer selection for FAT12, FAT16, or FAT32 with capacity-aware layout generation
 - FAT32 root cluster, FSInfo, backup boot metadata, and mirrored FAT handling
 - `make test-fat` host integration suite using the production FAT driver with a file-backed ATA adapter
@@ -23,6 +27,7 @@ All notable changes to AO OS will be documented in this file.
 - Shell can launch both `.aob` and `.elf` executables
 - Stage 1 reserves the standard BPB/EBPB window; the installer keeps sectors 0-511 as the FAT reserved boot area
 - Filesystem abstraction now routes through VFS, reports FAT12, FAT16, or FAT32, and falls back to ramfs only when no valid FAT volume is found
+- Roadmap now tracks hardening work after background multitasking, VFS mount-table, and network bootstrap landed
 - ATA IDENTIFY capacity is exposed to the installer, and ATA wait timeouts were increased for large FAT32 formats
 - FAT32 allocation/free operations maintain primary and backup FSInfo free-space metadata
 

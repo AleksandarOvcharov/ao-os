@@ -7,7 +7,7 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - **Custom 2-Stage Bootloader**: No GRUB dependency, boots directly into 64-bit long mode with E820 memory detection
 - **64-bit Long Mode**: Full x86-64 kernel with proper GDT, TSS, and 4-level paging
 - **Memory Management**: E820 memory map, bitmap PMM (up to 4 GB), VMM with 4-level page tables
-- **Process Management**: Process creation, round-robin scheduler, preemptive context switching
+- **Process Management**: Process creation, background user jobs, round-robin scheduler, preemptive context switching
 - **User Mode (Ring 3)**: User programs run in ring 3 with kernel/user separation via GDT and page tables
 - **CPU Exception Handling**: All 22 CPU exceptions (ISR 0-21) with blue-screen register dump
 - **Enhanced CPUID**: Brand string, feature flags (SSE, AVX, NX...), family/model/stepping
@@ -16,7 +16,8 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - **FAT12/FAT16/FAT32 Filesystems**: Auto-detected, persistent read/write storage with subdirectory support
 - **AOB + ELF Executables**: Custom AOB binaries and ELF64 `ET_EXEC` user programs with syscall API
 - **Per-Process Page Tables**: User processes run with private CR3 address spaces and isolated user pages
-- **VFS + Block Cache**: FAT/RAMFS are mounted through a VFS facade with cached sector I/O for FAT
+- **VFS + Block Cache**: FAT/RAMFS are mounted through a VFS mount table with cached sector I/O for FAT
+- **PCI + Network Bootstrap**: PCI bus scan with NE2000/virtio-net detection and ARP/IPv4/ICMP/UDP/TCP stack skeleton
 - **40+ Shell Commands**: File operations, directory navigation, text editor, system tools, process management (`ps`, `kill`)
 - **Interactive Shell**: Command history, colored prompts, working directory display
 - Serial console output for debugging (COM1)
@@ -111,6 +112,8 @@ ao-os/
 │   │   ├── storage/   # Disk I/O
 │   │   │   ├── ata.c          # ATA PIO driver with timeout protection
 │   │   │   └── block_cache.c  # Write-through sector cache
+│   │   ├── pci/       # PCI configuration-space scanning
+│   │   │   └── pci.c
 │   │   ├── serial/    # Serial communication
 │   │   │   └── serial.c       # COM1 serial port driver
 │   │   └── time/      # Timing and clock
@@ -124,6 +127,8 @@ ao-os/
 │   │   └── ramfs.c    # RAM filesystem fallback
 │   ├── exec/          # Executable loaders
 │   │   └── elf.c      # ELF64 ET_EXEC loader
+│   ├── net/           # Network stack bootstrap
+│   │   └── net.c      # Device detection and protocol-layer skeleton
 │   ├── memory/        # Memory management
 │   │   ├── pmm.c      # Physical page frame allocator (bitmap, E820)
 │   │   ├── vmm.c      # Virtual memory manager (4-level page tables)
@@ -158,6 +163,7 @@ ao-os/
 - `kernel -v` or `kernel --version` - Display kernel version and build information
 - `sysinfo` - Display system information (CPU, RAM, uptime)
 - `diskinfo` - Display disk controller information
+- `netstat` - Display PCI/network stack status
 - `sconsole --status` - Display serial console status
 - `ls` - List files and directories in the active filesystem
 - `cat <filename>` - Display file contents
@@ -168,7 +174,7 @@ ao-os/
 - `mkdir <dirname>` / `rmdir <dirname>` - Create or remove an empty directory
 - `cd <dirname>` / `pwd` - Navigate and display the current directory
 - `install` - Reinstall AO OS using FAT12, FAT16, or FAT32
-- `*.aob` / `*.elf` - Run AOB or ELF64 user executables
+- `*.aob` / `*.elf` - Run AOB or ELF64 user executables; append `&` for background execution
 - `mem` - Display memory usage statistics
 - `uptime` - Display system uptime
 - `color <fg>` - Change text color (e.g., `color light_green`)
@@ -195,8 +201,9 @@ bootloader --> kernel --> drivers --> fs --> memory --> process --> user program
 AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
 
 - **Kernel process (PID 0)** runs the shell in ring 0
-- **User processes (PID 1+)** execute AOB binaries in ring 3 (user mode)
+- **User processes (PID 1+)** execute AOB or ELF64 binaries in ring 3 (user mode)
 - **Round-robin scheduler** with 50ms time quantum, driven by PIT timer at 100Hz
+- **Background jobs**: `.aob` and `.elf` programs can run detached with `&`, allowing multiple isolated user processes to share CPU time
 - **Context switching** saves/restores all 15 GPRs + CPU interrupt frame (RIP, CS, RFLAGS, RSP, SS)
 - **TSS** provides RSP0 for automatic ring 3 -> ring 0 stack switching on interrupts
 - **Syscall interface** via `int 0x80` allows user programs to request kernel services
@@ -205,20 +212,21 @@ AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
 
 - User processes have private page tables, but page-table cleanup is still basic
 - FAT creation currently uses 8.3 names; LFN creation and permissions are not supported
-- VFS currently mounts one root filesystem automatically; general mount points are not implemented yet
-- No networking support
+- VFS has a small mount table and `/dev` mount, but lacks full mount/unmount shell management and per-mount CWD tracking
+- Network code currently detects PCI Ethernet devices and exposes protocol skeletons; packet TX/RX and full ARP/IPv4/ICMP/UDP/TCP are not complete yet
 - ELF support is limited to static ELF64 `ET_EXEC` load segments; no dynamic linker yet
 - No inter-process communication (IPC)
 - No signals or asynchronous event delivery
 
 ## Roadmap
 
-- [ ] True concurrent multitasking (multiple isolated user processes)
+- [ ] Packet TX/RX for NE2000 and virtio-net
+- [ ] ARP, IPv4, ICMP, UDP, and TCP implementations on top of the network bootstrap
+- [ ] Shell mount/unmount commands and multiple block-device mounting
+- [ ] Stronger process cleanup for page-table hierarchy pages and zombie accounting
 - [ ] ELF relocation, PIE, and dynamic linking support
-- [ ] VFS mount table with multiple disks and mount points
 - [ ] FAT write optimizations and long-name creation
 - [ ] Graphics mode (VESA framebuffer)
-- [ ] Networking stack (NE2000/virtio-net)
 - [ ] IPC mechanisms (pipes, shared memory)
 
 ## Documentation

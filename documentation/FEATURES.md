@@ -21,6 +21,7 @@
   - Full register save/restore (15 GPRs + iretq frame) in assembly
   - Up to 8 concurrent processes with per-process 8KB kernel stacks
   - Process states: UNUSED, READY, RUNNING, BLOCKED, TERMINATED
+  - Detached background `.aob`/`.elf` jobs using shell `&`
 - **User Mode (Ring 3)**:
   - User programs execute in ring 3 with hardware-enforced privilege separation
   - Separate user code/data GDT segments with DPL=3
@@ -31,7 +32,7 @@
   - Create, terminate, wait, and list processes
   - Kernel process (PID 0) runs the shell
   - User processes (PID 1+) run AOB or ELF64 executables
-  - `ps` and `kill` shell commands
+  - `ps`, `kill`, and `reap` shell commands
 - **Syscall Interface (int 0x80)**:
   - System call dispatcher with SYS_WRITE, SYS_EXIT, SYS_OPEN, SYS_READ, SYS_CLOSE
   - IDT gate at DPL=3 for user-mode access
@@ -157,6 +158,17 @@
   - Supports basic operations: create, write, read, list, delete
   - Automatic null terminator for text files
   - Fallback when no disk filesystem detected
+- **VFS Mount Table**:
+  - Longest-prefix path dispatch for mounted filesystem backends
+  - Root mount at `/`
+  - `/dev` mount backed by ramfs as the first pseudo-filesystem slot
+  - Foundation for future `/mnt/disk1`, device files, and mount/unmount commands
+- **PCI + Network Bootstrap**:
+  - PCI configuration-space scan using ports `0xCF8/0xCFC`
+  - Ethernet-class device detection
+  - NE2000 (`10ec:8029`) and virtio-net (`1af4:*`) recognition
+  - `netstat` shell command for stack/device status
+  - ARP, IPv4, ICMP, UDP, and TCP initialization skeletons
 
 ### Input
 - **Keyboard Driver**: PS/2 keyboard with interrupt-driven input (IRQ1)
@@ -261,17 +273,17 @@
 - [ ] Shell piping and redirection (`|`, `>`, `<`)
 - [ ] Shell scripting / batch files
 - [ ] ELF userland examples and build recipe
+- [ ] Shell `mount`/`umount` commands
 
 ### Medium Term
 - [ ] Multiple virtual terminals
-- [ ] PCI bus enumeration
 - [ ] DMA for disk I/O
-- [ ] True concurrent user processes with isolated address spaces
-- [ ] VFS mount table and multiple block devices
+- [ ] ELF relocation, PIE, and dynamic linking support
+- [ ] Packet TX/RX for NE2000 and virtio-net
 
 ### Long Term
 - [ ] IPC mechanisms (pipes, shared memory)
-- [ ] Network stack (basic)
+- [ ] ARP, IPv4, ICMP, UDP, and TCP implementations
 - [ ] Graphics mode support (VESA framebuffer)
 - [ ] EXT2 or another second on-disk filesystem backend
 

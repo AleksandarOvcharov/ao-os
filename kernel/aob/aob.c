@@ -58,7 +58,7 @@ int aob_load(const char* filename, aob_context_t* ctx) {
     return 0;
 }
 
-int aob_execute(aob_context_t* ctx, const char* cmdline) {
+int aob_spawn(aob_context_t* ctx, const char* cmdline, int background) {
     if (!ctx || !ctx->code_ptr) {
         klog_error("Invalid AOB context");
         return -1;
@@ -105,10 +105,18 @@ int aob_execute(aob_context_t* ctx, const char* cmdline) {
     process_write_user(proc, USER_API_BASE, api, sizeof(api));
     process_setup_user_args(proc, cmdline ? cmdline : pname);
 
-    /* Wait for process to complete */
+    if (background) {
+        process_detach(proc->pid);
+        return (int)proc->pid;
+    }
+
     process_wait(proc->pid);
 
     return 0;
+}
+
+int aob_execute(aob_context_t* ctx, const char* cmdline) {
+    return aob_spawn(ctx, cmdline, 0);
 }
 
 void aob_unload(aob_context_t* ctx) {
