@@ -6,6 +6,7 @@
 #include "fat.h"
 #include "fs.h"
 #include "ata.h"
+#include "block_cache.h"
 #include "klog.h"
 
 #define SECTOR_SIZE 512
@@ -151,10 +152,10 @@ static void exercise(fat_type_t expected) {
 
 static void corrupt(fat_type_t expected) {
     layout_t l=layout(); fat_init(); CHECK(fat_get_type()==expected); uint32_t bytes=l.spc*512, size=bytes*4; uint8_t* data=malloc(size),* out=malloc(size);uint32_t got,first;CHECK(data&&out);fill_pattern(data,size,91);
-    CHECK(fat_create("LOOP.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"LOOP.BIN");CHECK(first>=2);raw_fat_set(&l,first,first);got=0;CHECK(fat_read("LOOP.BIN",(char*)out,&got)!=0);
-    CHECK(fat_create("SHORT.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"SHORT.BIN");CHECK(first>=2);raw_fat_set(&l,first,l.type==FAT_TYPE_12?0xFFF:(l.type==FAT_TYPE_16?0xFFFF:0x0FFFFFFF));got=0;CHECK(fat_read("SHORT.BIN",(char*)out,&got)!=0);
-    CHECK(fat_create("BAD.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"BAD.BIN");CHECK(first>=2);raw_fat_set(&l,first,l.type==FAT_TYPE_12?0xFF7:(l.type==FAT_TYPE_16?0xFFF7:0x0FFFFFF7));got=0;CHECK(fat_read("BAD.BIN",(char*)out,&got)!=0);
+    CHECK(fat_create("LOOP.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"LOOP.BIN");CHECK(first>=2);raw_fat_set(&l,first,first);block_cache_invalidate();got=0;CHECK(fat_read("LOOP.BIN",(char*)out,&got)!=0);
+    CHECK(fat_create("SHORT.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"SHORT.BIN");CHECK(first>=2);raw_fat_set(&l,first,l.type==FAT_TYPE_12?0xFFF:(l.type==FAT_TYPE_16?0xFFFF:0x0FFFFFFF));block_cache_invalidate();got=0;CHECK(fat_read("SHORT.BIN",(char*)out,&got)!=0);
+    CHECK(fat_create("BAD.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"BAD.BIN");CHECK(first>=2);raw_fat_set(&l,first,l.type==FAT_TYPE_12?0xFF7:(l.type==FAT_TYPE_16?0xFFF7:0x0FFFFFF7));block_cache_invalidate();got=0;CHECK(fat_read("BAD.BIN",(char*)out,&got)!=0);
     free(data);free(out);checks+=12;
 }
 
-int main(int argc,char**argv){if(argc!=4){fprintf(stderr,"usage: %s IMAGE TYPE exercise|corrupt\n",argv[0]);return 2;}disk=fopen(argv[1],"r+b");if(!disk){perror(argv[1]);return 2;}CHECK(fseeko(disk,0,SEEK_END)==0);disk_sectors=(uint64_t)ftello(disk)/512;selected_drive=0;fat_type_t expected=(fat_type_t)atoi(argv[2]);if(argv[3][0]=='e')exercise(expected);else corrupt(expected);printf("PASS FAT%d %s (%d checks)\n",expected,argv[3],checks);fclose(disk);return 0;}
+int main(int argc,char**argv){if(argc!=4){fprintf(stderr,"usage: %s IMAGE TYPE exercise|corrupt\n",argv[0]);return 2;}disk=fopen(argv[1],"r+b");if(!disk){perror(argv[1]);return 2;}CHECK(fseeko(disk,0,SEEK_END)==0);disk_sectors=(uint64_t)ftello(disk)/512;selected_drive=0;block_cache_init();fat_type_t expected=(fat_type_t)atoi(argv[2]);if(argv[3][0]=='e')exercise(expected);else corrupt(expected);printf("PASS FAT%d %s (%d checks)\n",expected,argv[3],checks);fclose(disk);return 0;}

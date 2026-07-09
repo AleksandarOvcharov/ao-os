@@ -5,6 +5,7 @@
 #include "commands.h"
 #include "fs.h"
 #include "aob.h"
+#include "elf.h"
 #include "process.h"
 
 #define MAX_COMMAND_LENGTH 256
@@ -258,10 +259,22 @@ void shell_execute_command(const char* cmd) {
             filename[cmd_len] = '\0';
             
             if (aob_load(filename, &ctx) == 0) {
-                shell_setup_args(cmd);
-                aob_execute(&ctx);
+                aob_execute(&ctx, cmd);
                 aob_unload(&ctx);
             } else {
+                uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                terminal_setcolor(error_color);
+                terminal_writestring("Error: Failed to load or execute ");
+                terminal_writestring(filename);
+                terminal_writestring("\n");
+                terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
+            }
+        } else if (cmd_len > 4 && strncmp(cmd + cmd_len - 4, ".elf", 4) == 0) {
+            char filename[256];
+            memcpy(filename, cmd, cmd_len);
+            filename[cmd_len] = '\0';
+
+            if (elf_execute(filename, cmd) != 0) {
                 uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
                 terminal_setcolor(error_color);
                 terminal_writestring("Error: Failed to load or execute ");

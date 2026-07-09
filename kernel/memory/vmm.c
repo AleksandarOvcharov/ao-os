@@ -15,6 +15,7 @@
  */
 
 static uint64_t kernel_pml4_phys = 0;
+#define PTE_PRIVATE_TABLE (1ULL << 9)
 
 /* Since we're identity-mapped, phys addr == virt addr for kernel memory */
 static inline uint64_t* phys_to_virt(uint64_t phys) {
@@ -29,6 +30,10 @@ uint64_t vmm_get_cr3(void) {
     uint64_t cr3;
     asm volatile("mov %%cr3, %0" : "=r"(cr3));
     return cr3;
+}
+
+void vmm_set_cr3(uint64_t cr3) {
+    asm volatile("mov %0, %%cr3" :: "r"(cr3 & PTE_ADDR_MASK) : "memory");
 }
 
 /* Allocate a zeroed page for use as a page table */
@@ -49,13 +54,48 @@ void vmm_init(void) {
     klog_info("VMM initialized with 4-level paging");
 }
 
-int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
+uint64_t vmm_get_kernel_cr3(void) {
+    return kernel_pml4_phys;
+}
+
+uint64_t vmm_create_address_space(void) {
+    uint64_t pml4_page = alloc_table_page();
+    if (!pml4_page) return 0;
+
+    /* Copy kernel mappings. Private process mappings are installed with
+     * copy-on-map of intermediate page-table levels below. */
+    memcpy(phys_to_virt(pml4_page), phys_to_virt(kernel_pml4_phys), PAGE_SIZE);
+    return pml4_page;
+}
+
+static uint64_t copy_table_page(uint64_t src_phys) {
+    uint64_t dst = pmm_alloc_page();
+    if (!dst) return 0;
+    memcpy(phys_to_virt(dst), phys_to_virt(src_phys), PAGE_SIZE);
+    return dst;
+}
+
+static int ensure_private_entry(uint64_t cr3, uint64_t* table, uint64_t idx, uint64_t flags) {
+    if ((cr3 & PTE_ADDR_MASK) == kernel_pml4_phys) return 0;
+    if (!(table[idx] & PTE_PRESENT)) return 0;
+    if (table[idx] & PTE_PRIVATE_TABLE) return 0;
+
+    uint64_t child = table[idx] & PTE_ADDR_MASK;
+    uint64_t copy = copy_table_page(child);
+    if (!copy) return -1;
+    table[idx] = copy | ((table[idx] | flags | PTE_PRIVATE_TABLE) & ~PTE_ADDR_MASK);
+    return 0;
+}
+
+int vmm_map_page_in(uint64_t cr3, uint64_t virt, uint64_t phys, uint64_t flags) {
     /* Ensure addresses are page-aligned */
     virt &= PTE_ADDR_MASK;
     phys &= PTE_ADDR_MASK;
     flags &= ~PTE_ADDR_MASK;
 
-    uint64_t* pml4 = phys_to_virt(kernel_pml4_phys);
+    cr3 &= PTE_ADDR_MASK;
+    if (!cr3) return -1;
+    uint64_t* pml4 = phys_to_virt(cr3);
 
     /* Determine parent entry flags - propagate PTE_USER if requested */
     uint64_t parent_flags = PTE_PRESENT | PTE_WRITABLE;
@@ -63,6 +103,7 @@ int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
 
     /* Level 4: PML4 → PDPT */
     uint64_t pml4_idx = PML4_INDEX(virt);
+    if (ensure_private_entry(cr3, pml4, pml4_idx, parent_flags) != 0) return -1;
     if (!(pml4[pml4_idx] & PTE_PRESENT)) {
         uint64_t pdpt_page = alloc_table_page();
         if (pdpt_page == 0) return -1;
@@ -74,6 +115,7 @@ int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
 
     /* Level 3: PDPT → PD */
     uint64_t pdpt_idx = PDPT_INDEX(virt);
+    if (ensure_private_entry(cr3, pdpt, pdpt_idx, parent_flags) != 0) return -1;
     if (!(pdpt[pdpt_idx] & PTE_PRESENT)) {
         uint64_t pd_page = alloc_table_page();
         if (pd_page == 0) return -1;
@@ -117,14 +159,20 @@ int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
     uint64_t pt_idx = PT_INDEX(virt);
     pt[pt_idx] = phys | flags | PTE_PRESENT;
 
-    vmm_invlpg(virt);
+    if (cr3 == (vmm_get_cr3() & PTE_ADDR_MASK)) vmm_invlpg(virt);
     return 0;
 }
 
-uint64_t vmm_unmap_page(uint64_t virt) {
+int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
+    return vmm_map_page_in(kernel_pml4_phys, virt, phys, flags);
+}
+
+uint64_t vmm_unmap_page_in(uint64_t cr3, uint64_t virt) {
     virt &= PTE_ADDR_MASK;
 
-    uint64_t* pml4 = phys_to_virt(kernel_pml4_phys);
+    cr3 &= PTE_ADDR_MASK;
+    if (!cr3) return 0;
+    uint64_t* pml4 = phys_to_virt(cr3);
 
     uint64_t pml4_idx = PML4_INDEX(virt);
     if (!(pml4[pml4_idx] & PTE_PRESENT)) return 0;
@@ -146,12 +194,18 @@ uint64_t vmm_unmap_page(uint64_t virt) {
     uint64_t old_phys = pt[pt_idx] & PTE_ADDR_MASK;
     pt[pt_idx] = 0;
 
-    vmm_invlpg(virt);
+    if (cr3 == (vmm_get_cr3() & PTE_ADDR_MASK)) vmm_invlpg(virt);
     return old_phys;
 }
 
-uint64_t vmm_get_physical(uint64_t virt) {
-    uint64_t* pml4 = phys_to_virt(kernel_pml4_phys);
+uint64_t vmm_unmap_page(uint64_t virt) {
+    return vmm_unmap_page_in(kernel_pml4_phys, virt);
+}
+
+uint64_t vmm_get_physical_in(uint64_t cr3, uint64_t virt) {
+    cr3 &= PTE_ADDR_MASK;
+    if (!cr3) return 0;
+    uint64_t* pml4 = phys_to_virt(cr3);
 
     uint64_t pml4_idx = PML4_INDEX(virt);
     if (!(pml4[pml4_idx] & PTE_PRESENT)) return 0;
@@ -178,4 +232,8 @@ uint64_t vmm_get_physical(uint64_t virt) {
     uint64_t base = pt[pt_idx] & PTE_ADDR_MASK;
     uint64_t offset = virt & 0xFFF;  /* offset within 4KB page */
     return base + offset;
+}
+
+uint64_t vmm_get_physical(uint64_t virt) {
+    return vmm_get_physical_in(kernel_pml4_phys, virt);
 }

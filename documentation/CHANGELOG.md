@@ -7,6 +7,10 @@ All notable changes to AO OS will be documented in this file.
 ### Added
 - Shared FAT driver with automatic FAT12, FAT16, and FAT32 detection from BPB geometry and data-cluster count
 - FAT16 and FAT32 read/write, file creation/deletion, subdirectories, and multi-cluster file support
+- Per-process user address spaces with private CR3 values, private user pages, and scheduler CR3 switching
+- ELF64 `ET_EXEC` loader for static executable load segments
+- VFS root dispatcher with FAT and RAMFS backend operations
+- Write-through sector block cache for FAT disk I/O
 - Installer selection for FAT12, FAT16, or FAT32 with capacity-aware layout generation
 - FAT32 root cluster, FSInfo, backup boot metadata, and mirrored FAT handling
 - `make test-fat` host integration suite using the production FAT driver with a file-backed ATA adapter
@@ -15,8 +19,10 @@ All notable changes to AO OS will be documented in this file.
 
 ### Changed
 - Development disk image increased to 64 MiB so every installer filesystem choice is valid
+- AOB execution now copies code, API metadata, and argv into the target process address space instead of using shared user mappings
+- Shell can launch both `.aob` and `.elf` executables
 - Stage 1 reserves the standard BPB/EBPB window; the installer keeps sectors 0-511 as the FAT reserved boot area
-- Filesystem abstraction now reports FAT12, FAT16, or FAT32 and falls back to ramfs only when no valid FAT volume is found
+- Filesystem abstraction now routes through VFS, reports FAT12, FAT16, or FAT32, and falls back to ramfs only when no valid FAT volume is found
 - ATA IDENTIFY capacity is exposed to the installer, and ATA wait timeouts were increased for large FAT32 formats
 - FAT32 allocation/free operations maintain primary and backup FSInfo free-space metadata
 

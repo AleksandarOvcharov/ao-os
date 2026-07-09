@@ -1,8 +1,12 @@
 #include "fat.h"
 #include "fs.h"
 #include "ata.h"
+#include "block_cache.h"
 #include "string.h"
 #include "klog.h"
+
+#define ata_read_sector block_cache_read_sector
+#define ata_write_sector block_cache_write_sector
 
 #define SECTOR_SIZE 512
 #define DIR_ENTRY_SIZE 32

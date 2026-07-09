@@ -24,12 +24,13 @@
 - **User Mode (Ring 3)**:
   - User programs execute in ring 3 with hardware-enforced privilege separation
   - Separate user code/data GDT segments with DPL=3
-  - User memory: code at 0x200000, stack at 0x800000 (16KB)
+  - Per-process page tables with private CR3 values and private user pages
+  - Default user stack at 0x800000 (16KB); executable segments are mapped into each process address space
   - TSS RSP0 ensures clean ring 3 → ring 0 transitions on interrupts
 - **Process Management**:
   - Create, terminate, wait, and list processes
   - Kernel process (PID 0) runs the shell
-  - User processes (PID 1+) run AOB binaries
+  - User processes (PID 1+) run AOB or ELF64 executables
   - `ps` and `kill` shell commands
 - **Syscall Interface (int 0x80)**:
   - System call dispatcher with SYS_WRITE, SYS_EXIT, SYS_OPEN, SYS_READ, SYS_CLOSE
@@ -62,7 +63,7 @@
 - **Memory Management**:
   - **E820 Memory Map**: BIOS INT 0x15 detection in bootloader, accurate physical RAM layout
   - **Physical Page Frame Allocator (PMM)**: Bitmap-based, manages all 4KB pages up to 4 GB
-  - **Virtual Memory Manager (VMM)**: 4-level page tables (PML4/PDPT/PD/PT), map/unmap 4KB pages, 2MB huge page splitting
+  - **Virtual Memory Manager (VMM)**: 4-level page tables (PML4/PDPT/PD/PT), per-process address spaces, map/unmap 4KB pages, 2MB huge page splitting
   - **Kernel Heap**: 1 MB heap placed after kernel image (`_kernel_end`), backed by PMM
   - Dynamic memory allocation (kmalloc/kfree)
   - Block-based allocator with automatic merging
@@ -91,13 +92,18 @@
   - Program metadata: name, version, entry point, code size
   - Direct execution from shell by typing filename
   - Example: `hello.aob` runs the program
+- **ELF64 Executable Support**:
+  - Loads static ELF64 `ET_EXEC` binaries
+  - Supports `PT_LOAD` program segments with file-backed and zeroed BSS ranges
+  - Maps segments into private process address spaces
+  - Example: `hello.elf` runs the ELF program
 - **Raw Binary (.bin) Support**:
   - Execute raw x86 machine code directly
   - No header required - pure binary execution
   - Example: `hello.bin` runs the raw binary
 - **AOB Loader**:
   - Validates magic number and version
-  - Loads code into memory buffer
+  - Copies code into private process memory
   - Executes at specified entry point
   - Returns control to kernel after execution
 - **aobcompile Tool**:
@@ -254,20 +260,20 @@
 - [ ] Tab completion
 - [ ] Shell piping and redirection (`|`, `>`, `<`)
 - [ ] Shell scripting / batch files
+- [ ] ELF userland examples and build recipe
 
 ### Medium Term
 - [ ] Multiple virtual terminals
 - [ ] PCI bus enumeration
 - [ ] DMA for disk I/O
-- [ ] Per-process page tables (memory isolation)
-- [ ] ELF executable support
+- [ ] True concurrent user processes with isolated address spaces
+- [ ] VFS mount table and multiple block devices
 
 ### Long Term
-- [ ] True concurrent user processes with separate address spaces
 - [ ] IPC mechanisms (pipes, shared memory)
 - [ ] Network stack (basic)
 - [ ] Graphics mode support (VESA framebuffer)
-- [ ] Virtual filesystem (VFS) with mount points
+- [ ] EXT2 or another second on-disk filesystem backend
 
 ## Technical Specifications
 

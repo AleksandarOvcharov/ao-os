@@ -8,7 +8,8 @@ mkdir -p "$OUT"
 rm -f "$OUT"/*.img "$BIN"
 
 cc -std=gnu99 -Wall -Wextra -Werror -I"$ROOT/include" \
-    "$ROOT/tools/tests/fat_host_test.c" "$ROOT/kernel/fs/fat.c" -o "$BIN"
+    "$ROOT/tools/tests/fat_host_test.c" "$ROOT/kernel/fs/fat.c" \
+    "$ROOT/kernel/drivers/storage/block_cache.c" "$ROOT/kernel/lib/string.c" -o "$BIN"
 
 make_image() {
     type=$1

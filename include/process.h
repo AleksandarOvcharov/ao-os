@@ -6,6 +6,7 @@
 #define MAX_PROCESSES 8
 #define PROCESS_KERNEL_STACK_SIZE 8192
 #define PROCESS_USER_STACK_PAGES 4
+#define PROCESS_MAX_USER_PAGES 256
 
 /* GDT segment selectors */
 #define SEL_KERNEL_CS  0x08
@@ -13,7 +14,7 @@
 #define SEL_USER_DS    0x2B   /* 0x28 | RPL 3 */
 #define SEL_USER_CS    0x33   /* 0x30 | RPL 3 */
 
-/* User memory layout (identity-mapped) */
+/* User memory layout */
 #define USER_CODE_BASE  0x00200000
 #define USER_STACK_BASE 0x00800000
 #define USER_STACK_SIZE (PROCESS_USER_STACK_PAGES * 4096)
@@ -54,6 +55,9 @@ typedef struct {
     uint64_t cr3;               /* Page table (shared for now) */
     int is_user;                /* 1 = ring 3 process */
     int exit_code;
+
+    uint64_t user_pages[PROCESS_MAX_USER_PAGES];
+    int user_page_count;
 } process_t;
 
 /* Process management */
@@ -66,6 +70,10 @@ int process_is_running(uint64_t pid);
 void process_exit(int exit_code);
 void process_wait(uint64_t pid);
 int process_list(process_t** list);
+int process_map_user_page(process_t* p, uint64_t virt, uint64_t flags);
+int process_write_user(process_t* p, uint64_t virt, const void* data, uint64_t size);
+int process_zero_user(process_t* p, uint64_t virt, uint64_t size);
+int process_setup_user_args(process_t* p, const char* full_cmd);
 
 /* Scheduler */
 void scheduler_start(void);  /* Enable scheduling (call after boot completes) */

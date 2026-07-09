@@ -28,18 +28,27 @@ void vmm_init(void);
 
 /* Map a 4KB virtual page to a physical page */
 int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags);
+int vmm_map_page_in(uint64_t cr3, uint64_t virt, uint64_t phys, uint64_t flags);
 
 /* Unmap a 4KB virtual page. Returns the physical address that was mapped. */
 uint64_t vmm_unmap_page(uint64_t virt);
+uint64_t vmm_unmap_page_in(uint64_t cr3, uint64_t virt);
 
 /* Walk page tables to get the physical address for a virtual address.
  * Returns 0 if not mapped. */
 uint64_t vmm_get_physical(uint64_t virt);
+uint64_t vmm_get_physical_in(uint64_t cr3, uint64_t virt);
 
 /* Invalidate a single TLB entry */
 void vmm_invlpg(uint64_t addr);
 
 /* Get current PML4 physical address (from CR3) */
 uint64_t vmm_get_cr3(void);
+void vmm_set_cr3(uint64_t cr3);
+
+/* Create a process address space seeded with kernel mappings.
+ * User mappings should be added with vmm_map_page_in(). */
+uint64_t vmm_create_address_space(void);
+uint64_t vmm_get_kernel_cr3(void);
 
 #endif

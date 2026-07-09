@@ -38,12 +38,9 @@ void process_init(void) {
     p->kernel_rsp = 0;
     p->cr3 = vmm_get_cr3();
     p->exit_code = 0;
+    p->user_page_count = 0;
 
     current_process = p;
-
-    /* Reserve memory regions for user programs */
-    pmm_mark_region_used(USER_CODE_BASE, 16384);
-    pmm_mark_region_used(USER_STACK_BASE, USER_STACK_SIZE);
 
     klog_info("Process subsystem initialized");
 }
@@ -76,6 +73,103 @@ int process_list(process_t** list) {
     return MAX_PROCESSES;
 }
 
+static void process_cleanup(process_t* p) {
+    if (!p || p->pid == 0) return;
+
+    for (int i = 0; i < p->user_page_count; i++) {
+        if (p->user_pages[i]) pmm_free_page(p->user_pages[i]);
+        p->user_pages[i] = 0;
+    }
+    p->user_page_count = 0;
+
+    if (p->cr3 && p->cr3 != vmm_get_kernel_cr3()) {
+        pmm_free_page(p->cr3);
+    }
+    p->cr3 = 0;
+}
+
+int process_map_user_page(process_t* p, uint64_t virt, uint64_t flags) {
+    if (!p || !p->is_user || !p->cr3) return -1;
+    if (vmm_get_physical_in(p->cr3, virt & ~(PAGE_SIZE - 1))) return 0;
+    if (p->user_page_count >= PROCESS_MAX_USER_PAGES) return -1;
+
+    uint64_t phys = pmm_alloc_page();
+    if (!phys) return -1;
+    memset((void*)(uintptr_t)phys, 0, PAGE_SIZE);
+
+    if (vmm_map_page_in(p->cr3, virt, phys, flags | PTE_USER) != 0) {
+        pmm_free_page(phys);
+        return -1;
+    }
+
+    p->user_pages[p->user_page_count++] = phys;
+    return 0;
+}
+
+int process_write_user(process_t* p, uint64_t virt, const void* data, uint64_t size) {
+    if (!p || !p->cr3 || (!data && size)) return -1;
+    const uint8_t* src = (const uint8_t*)data;
+
+    while (size > 0) {
+        uint64_t phys = vmm_get_physical_in(p->cr3, virt);
+        if (!phys) return -1;
+
+        uint64_t page_left = PAGE_SIZE - (virt & (PAGE_SIZE - 1));
+        uint64_t n = size < page_left ? size : page_left;
+        memcpy((void*)(uintptr_t)phys, src, (size_t)n);
+        virt += n;
+        src += n;
+        size -= n;
+    }
+    return 0;
+}
+
+int process_zero_user(process_t* p, uint64_t virt, uint64_t size) {
+    if (!p || !p->cr3) return -1;
+
+    while (size > 0) {
+        uint64_t phys = vmm_get_physical_in(p->cr3, virt);
+        if (!phys) return -1;
+
+        uint64_t page_left = PAGE_SIZE - (virt & (PAGE_SIZE - 1));
+        uint64_t n = size < page_left ? size : page_left;
+        memset((void*)(uintptr_t)phys, 0, (size_t)n);
+        virt += n;
+        size -= n;
+    }
+    return 0;
+}
+
+int process_setup_user_args(process_t* p, const char* full_cmd) {
+    if (!p || !full_cmd) return -1;
+
+    uint8_t page[PAGE_SIZE];
+    memset(page, 0, sizeof(page));
+
+    uint64_t* base = (uint64_t*)page;
+    char* strbuf = (char*)(page + 8 + 16 * 8);
+    int strbuf_pos = 0;
+    int argc = 0;
+    const char* s = full_cmd;
+
+    while (*s && argc < 16 && strbuf_pos < (int)(PAGE_SIZE - 8 - 16 * 8 - 1)) {
+        while (*s == ' ') s++;
+        if (!*s) break;
+        const char* tok = s;
+        while (*s && *s != ' ') s++;
+        int len = (int)(s - tok);
+        if (strbuf_pos + len + 1 >= (int)(PAGE_SIZE - 8 - 16 * 8)) break;
+
+        base[1 + argc] = USER_ARGV_BASE + 8 + 16 * 8 + (uint64_t)strbuf_pos;
+        memcpy(strbuf + strbuf_pos, tok, (size_t)len);
+        strbuf_pos += len;
+        strbuf[strbuf_pos++] = '\0';
+        argc++;
+    }
+    base[0] = (uint64_t)argc;
+    return process_write_user(p, USER_ARGV_BASE, page, PAGE_SIZE);
+}
+
 process_t* process_create(const char* name, uint64_t entry_point, int is_user) {
     /* Find unused slot */
     process_t* p = 0;
@@ -96,8 +190,13 @@ process_t* process_create(const char* name, uint64_t entry_point, int is_user) {
     strncpy(p->name, name, 31);
     p->name[31] = '\0';
     p->is_user = is_user;
-    p->cr3 = vmm_get_cr3();
+    p->cr3 = is_user ? vmm_create_address_space() : vmm_get_cr3();
+    if (!p->cr3) {
+        klog_error("Failed to create process address space");
+        return 0;
+    }
     p->exit_code = 0;
+    p->user_page_count = 0;
 
     /* Set up kernel stack */
     p->kernel_stack = kernel_stacks[slot];
@@ -116,22 +215,23 @@ process_t* process_create(const char* name, uint64_t entry_point, int is_user) {
         ctx->ss = SEL_USER_DS;
         ctx->rsp = USER_STACK_TOP;
 
-        /* Map user-accessible pages */
-        /* Code pages (0x200000, 4 pages = 16KB) */
-        for (int i = 0; i < 4; i++) {
-            uint64_t addr = USER_CODE_BASE + (uint64_t)i * PAGE_SIZE;
-            vmm_map_page(addr, addr, PTE_WRITABLE | PTE_USER);
-        }
-
-        /* User stack pages (0x800000, 4 pages = 16KB) */
+        /* User stack pages */
         for (int i = 0; i < PROCESS_USER_STACK_PAGES; i++) {
             uint64_t addr = USER_STACK_BASE + (uint64_t)i * PAGE_SIZE;
-            vmm_map_page(addr, addr, PTE_WRITABLE | PTE_USER);
+            if (process_map_user_page(p, addr, PTE_WRITABLE) != 0) {
+                process_cleanup(p);
+                p->state = PROC_UNUSED;
+                return 0;
+            }
         }
 
         /* API and argv pages */
-        vmm_map_page(USER_API_BASE, USER_API_BASE, PTE_WRITABLE | PTE_USER);
-        vmm_map_page(USER_ARGV_BASE, USER_ARGV_BASE, PTE_WRITABLE | PTE_USER);
+        if (process_map_user_page(p, USER_API_BASE, PTE_WRITABLE) != 0 ||
+            process_map_user_page(p, USER_ARGV_BASE, PTE_WRITABLE) != 0) {
+            process_cleanup(p);
+            p->state = PROC_UNUSED;
+            return 0;
+        }
     } else {
         ctx->cs = SEL_KERNEL_CS;
         ctx->ss = SEL_KERNEL_DS;
@@ -177,6 +277,7 @@ void process_wait(uint64_t pid) {
     current_process->state = PROC_RUNNING;
 
     /* Clean up terminated process */
+    process_cleanup(target);
     target->state = PROC_UNUSED;
 }
 
@@ -247,6 +348,9 @@ uint64_t schedule_tick(uint64_t current_rsp) {
 
     /* Update TSS RSP0 for ring 3 -> ring 0 transitions */
     tss_set_rsp0(next->kernel_stack_top);
+    if ((vmm_get_cr3() & PTE_ADDR_MASK) != (next->cr3 & PTE_ADDR_MASK)) {
+        vmm_set_cr3(next->cr3);
+    }
 
     ticks_remaining = TIME_QUANTUM;
 

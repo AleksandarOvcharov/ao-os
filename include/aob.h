@@ -32,7 +32,7 @@ typedef struct {
 
 // AOB loader functions
 int aob_load(const char* filename, aob_context_t* ctx);
-int aob_execute(aob_context_t* ctx);
+int aob_execute(aob_context_t* ctx, const char* cmdline);
 void aob_unload(aob_context_t* ctx);
 
 #endif

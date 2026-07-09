@@ -45,12 +45,15 @@ KERNEL_OBJS = \
     $(BUILD_DIR)/klog.o \
     $(BUILD_DIR)/serial.o \
     $(BUILD_DIR)/ata.o \
+    $(BUILD_DIR)/block_cache.o \
     $(BUILD_DIR)/ramfs.o \
     $(BUILD_DIR)/fat.o \
+    $(BUILD_DIR)/vfs.o \
     $(BUILD_DIR)/fs.o \
     $(BUILD_DIR)/editor.o \
     $(BUILD_DIR)/installer.o \
     $(BUILD_DIR)/aob.o \
+    $(BUILD_DIR)/elf.o \
     $(BUILD_DIR)/syscall.o \
     $(BUILD_DIR)/rtc.o \
     $(BUILD_DIR)/exception.o \
@@ -115,6 +118,9 @@ $(BUILD_DIR)/scancode.o: $(DRIVERS_DIR)/input/scancode.c | $(BUILD_DIR)
 $(BUILD_DIR)/ata.o: $(DRIVERS_DIR)/storage/ata.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/block_cache.o: $(DRIVERS_DIR)/storage/block_cache.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 # ── Serial driver ──────────────────────────────────────────────────────────
 
 $(BUILD_DIR)/serial.o: $(DRIVERS_DIR)/serial/serial.c | $(BUILD_DIR)
@@ -172,6 +178,9 @@ $(BUILD_DIR)/fat.o: $(KERNEL_DIR)/fs/fat.c | $(BUILD_DIR)
 $(BUILD_DIR)/fs.o: $(KERNEL_DIR)/fs/fs.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
+$(BUILD_DIR)/vfs.o: $(KERNEL_DIR)/fs/vfs.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 $(BUILD_DIR)/editor.o: $(KERNEL_DIR)/editor/editor.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
@@ -179,6 +188,9 @@ $(BUILD_DIR)/installer.o: $(KERNEL_DIR)/installer/installer.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/aob.o: $(KERNEL_DIR)/aob/aob.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/elf.o: $(KERNEL_DIR)/exec/elf.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/syscall.o: $(KERNEL_DIR)/syscall.c | $(BUILD_DIR)

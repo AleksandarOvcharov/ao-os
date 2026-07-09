@@ -67,6 +67,7 @@ void cmd_help(void) {
     terminal_writestring("\n");
     terminal_writestring("Executables:\n");
     terminal_writestring("  *.aob    - Run AOB executable (e.g., hello.aob)\n");
+    terminal_writestring("  *.elf    - Run ELF64 executable (ET_EXEC)\n");
     terminal_writestring("  *.bin    - Run raw binary (e.g., hello.bin)\n");
     
     terminal_writestring("\nAvailable colors:\n");

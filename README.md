@@ -14,7 +14,9 @@ A 64-bit x86-64 operating system written in C and Assembly with a custom bootloa
 - **VGA Text Mode**: 80x25 color text display with 1000-line scrollback (PageUp/PageDown)
 - **Interrupt-Driven Keyboard**: PS/2 keyboard via IRQ1 with ring buffer (no polling)
 - **FAT12/FAT16/FAT32 Filesystems**: Auto-detected, persistent read/write storage with subdirectory support
-- **AOB Executable Format**: Custom binary format for user programs with syscall API
+- **AOB + ELF Executables**: Custom AOB binaries and ELF64 `ET_EXEC` user programs with syscall API
+- **Per-Process Page Tables**: User processes run with private CR3 address spaces and isolated user pages
+- **VFS + Block Cache**: FAT/RAMFS are mounted through a VFS facade with cached sector I/O for FAT
 - **40+ Shell Commands**: File operations, directory navigation, text editor, system tools, process management (`ps`, `kill`)
 - **Interactive Shell**: Command history, colored prompts, working directory display
 - Serial console output for debugging (COM1)
@@ -107,7 +109,8 @@ ao-os/
 │   │   │   ├── scancode.c     # PS/2 scancode tables and translation
 │   │   │   └── scancode.h     # Internal scancode API
 │   │   ├── storage/   # Disk I/O
-│   │   │   └── ata.c          # ATA PIO driver with timeout protection
+│   │   │   ├── ata.c          # ATA PIO driver with timeout protection
+│   │   │   └── block_cache.c  # Write-through sector cache
 │   │   ├── serial/    # Serial communication
 │   │   │   └── serial.c       # COM1 serial port driver
 │   │   └── time/      # Timing and clock
@@ -115,9 +118,12 @@ ao-os/
 │   │       └── rtc.c          # CMOS real-time clock
 │   ├── fs/            # Filesystem
 │   │   ├── fs.c       # Filesystem abstraction layer
+│   │   ├── vfs.c      # Virtual filesystem root dispatcher
 │   │   ├── fat.c      # Shared FAT12/FAT16/FAT32 implementation
 │   │   ├── fat12.c    # Retained legacy FAT12 source (not linked)
 │   │   └── ramfs.c    # RAM filesystem fallback
+│   ├── exec/          # Executable loaders
+│   │   └── elf.c      # ELF64 ET_EXEC loader
 │   ├── memory/        # Memory management
 │   │   ├── pmm.c      # Physical page frame allocator (bitmap, E820)
 │   │   ├── vmm.c      # Virtual memory manager (4-level page tables)
@@ -162,6 +168,7 @@ ao-os/
 - `mkdir <dirname>` / `rmdir <dirname>` - Create or remove an empty directory
 - `cd <dirname>` / `pwd` - Navigate and display the current directory
 - `install` - Reinstall AO OS using FAT12, FAT16, or FAT32
+- `*.aob` / `*.elf` - Run AOB or ELF64 user executables
 - `mem` - Display memory usage statistics
 - `uptime` - Display system uptime
 - `color <fg>` - Change text color (e.g., `color light_green`)
@@ -196,25 +203,23 @@ AO OS implements a preemptive multitasking kernel with ring 0/ring 3 separation:
 
 ## Limitations
 
-- Single user process at a time (shared virtual address space at 0x200000)
-- No per-process page tables (all processes share the kernel page table)
+- User processes have private page tables, but page-table cleanup is still basic
 - FAT creation currently uses 8.3 names; LFN creation and permissions are not supported
-- A single FAT volume is mounted automatically; there is no general VFS or mount table yet
+- VFS currently mounts one root filesystem automatically; general mount points are not implemented yet
 - No networking support
-- AOB executable format without dynamic linking or arguments passing to ring 3
+- ELF support is limited to static ELF64 `ET_EXEC` load segments; no dynamic linker yet
 - No inter-process communication (IPC)
 - No signals or asynchronous event delivery
 
 ## Roadmap
 
-- [ ] Per-process page tables (memory isolation between processes)
-- [ ] True concurrent multitasking (multiple user processes with separate address spaces)
-- [ ] Improved executable format (ELF support, dynamic linking)
-- [ ] FAT write optimizations, long-name creation, and sector caching
+- [ ] True concurrent multitasking (multiple isolated user processes)
+- [ ] ELF relocation, PIE, and dynamic linking support
+- [ ] VFS mount table with multiple disks and mount points
+- [ ] FAT write optimizations and long-name creation
 - [ ] Graphics mode (VESA framebuffer)
 - [ ] Networking stack (NE2000/virtio-net)
 - [ ] IPC mechanisms (pipes, shared memory)
-- [ ] Virtual filesystem (VFS) with mount points
 
 ## Documentation
 
