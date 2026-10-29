@@ -117,8 +117,7 @@ int syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3) 
             for (int i = 0; i < MAX_FD; i++) {
                 if (!fd_table[i].used) {
                     uint32_t sz = 0;
-                    if (fs_read(name, fd_table[i].data, &sz) != 0) return -1;
-                    if (sz > sizeof(fd_table[i].data)) return -1;
+                    if (fs_read(name, fd_table[i].data, &sz, sizeof(fd_table[i].data)) != 0) return -1;
                     fd_table[i].size = sz;
                     fd_table[i].pos  = 0;
                     fd_table[i].used = 1;

@@ -133,7 +133,7 @@ static void exercise(fat_type_t expected) {
     uint32_t cluster_bytes=l.spc*512, big_size=cluster_bytes*37+123, got=0;
     uint8_t* input=malloc(big_size),*output=malloc(big_size); CHECK(input&&output); fill_pattern(input,big_size,7);
     uint32_t total0,used0,free0,total1,used1,free1; fat_get_disk_info(&total0,&used0,&free0);
-    CHECK(fat_create("BIGFILE.BIN",(char*)input,big_size)==0); CHECK(fat_read("BIGFILE.BIN",(char*)output,&got)==0); CHECK(got==big_size); CHECK(equal_bytes(input,output,big_size));
+    CHECK(fat_create("BIGFILE.BIN",(char*)input,big_size)==0); CHECK(fat_read("BIGFILE.BIN",(char*)output,&got,big_size)==0); CHECK(got==big_size); CHECK(equal_bytes(input,output,big_size));
     uint32_t first=raw_root_entry_cluster(&l,"BIGFILE.BIN"); CHECK(first>=2); CHECK(fat_delete("BIGFILE.BIN")==0);
     fat_get_disk_info(&total1,&used1,&free1); CHECK(total1==total0); CHECK(used1==used0); CHECK(free1==free0);
     CHECK(fat_create("REUSED.BIN",(char*)input,big_size)==0); CHECK(raw_root_entry_cluster(&l,"REUSED.BIN")==first); CHECK(fat_delete("REUSED.BIN")==0);
@@ -142,19 +142,19 @@ static void exercise(fat_type_t expected) {
     char name[16]; uint8_t data[96],readback[96];
     for(int i=0;i<96;i++){snprintf(name,sizeof(name),"F%06d.DAT",i);fill_pattern(data,sizeof(data),(uint32_t)i);CHECK(fat_create(name,(char*)data,sizeof(data))==0);}
     void* entries=0;int count=0;CHECK(fat_list(&entries,&count)==0);CHECK(count==98);
-    for(int i=0;i<96;i+=11){snprintf(name,sizeof(name),"F%06d.DAT",i);got=0;fill_pattern(data,sizeof(data),(uint32_t)i);CHECK(fat_read(name,(char*)readback,&got)==0);CHECK(got==sizeof(data));CHECK(equal_bytes(data,readback,sizeof(data)));}
+    for(int i=0;i<96;i+=11){snprintf(name,sizeof(name),"F%06d.DAT",i);got=0;fill_pattern(data,sizeof(data),(uint32_t)i);CHECK(fat_read(name,(char*)readback,&got,sizeof(readback))==0);CHECK(got==sizeof(data));CHECK(equal_bytes(data,readback,sizeof(data)));}
     for(int i=0;i<96;i+=2){snprintf(name,sizeof(name),"F%06d.DAT",i);CHECK(fat_delete(name)==0);}
     for(int i=0;i<48;i++){snprintf(name,sizeof(name),"R%06d.DAT",i);fill_pattern(data,sizeof(data),(uint32_t)(i+200));CHECK(fat_create(name,(char*)data,sizeof(data))==0);}
     CHECK(fat_list(&entries,&count)==0);CHECK(count==98);
-    fat_init();CHECK(fat_chdir("MANY")==0);got=0;fill_pattern(data,sizeof(data),247);CHECK(fat_read("R000047.DAT",(char*)readback,&got)==0);CHECK(got==sizeof(data));CHECK(equal_bytes(data,readback,sizeof(data)));
+    fat_init();CHECK(fat_chdir("MANY")==0);got=0;fill_pattern(data,sizeof(data),247);CHECK(fat_read("R000047.DAT",(char*)readback,&got,sizeof(readback))==0);CHECK(got==sizeof(data));CHECK(equal_bytes(data,readback,sizeof(data)));
     free(input);free(output);checks+=30;
 }
 
 static void corrupt(fat_type_t expected) {
     layout_t l=layout(); fat_init(); CHECK(fat_get_type()==expected); uint32_t bytes=l.spc*512, size=bytes*4; uint8_t* data=malloc(size),* out=malloc(size);uint32_t got,first;CHECK(data&&out);fill_pattern(data,size,91);
-    CHECK(fat_create("LOOP.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"LOOP.BIN");CHECK(first>=2);raw_fat_set(&l,first,first);block_cache_invalidate();got=0;CHECK(fat_read("LOOP.BIN",(char*)out,&got)!=0);
-    CHECK(fat_create("SHORT.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"SHORT.BIN");CHECK(first>=2);raw_fat_set(&l,first,l.type==FAT_TYPE_12?0xFFF:(l.type==FAT_TYPE_16?0xFFFF:0x0FFFFFFF));block_cache_invalidate();got=0;CHECK(fat_read("SHORT.BIN",(char*)out,&got)!=0);
-    CHECK(fat_create("BAD.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"BAD.BIN");CHECK(first>=2);raw_fat_set(&l,first,l.type==FAT_TYPE_12?0xFF7:(l.type==FAT_TYPE_16?0xFFF7:0x0FFFFFF7));block_cache_invalidate();got=0;CHECK(fat_read("BAD.BIN",(char*)out,&got)!=0);
+    CHECK(fat_create("LOOP.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"LOOP.BIN");CHECK(first>=2);raw_fat_set(&l,first,first);block_cache_invalidate();got=0;CHECK(fat_read("LOOP.BIN",(char*)out,&got,size)!=0);
+    CHECK(fat_create("SHORT.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"SHORT.BIN");CHECK(first>=2);raw_fat_set(&l,first,l.type==FAT_TYPE_12?0xFFF:(l.type==FAT_TYPE_16?0xFFFF:0x0FFFFFFF));block_cache_invalidate();got=0;CHECK(fat_read("SHORT.BIN",(char*)out,&got,size)!=0);
+    CHECK(fat_create("BAD.BIN",(char*)data,size)==0);first=raw_root_entry_cluster(&l,"BAD.BIN");CHECK(first>=2);raw_fat_set(&l,first,l.type==FAT_TYPE_12?0xFF7:(l.type==FAT_TYPE_16?0xFFF7:0x0FFFFFF7));block_cache_invalidate();got=0;CHECK(fat_read("BAD.BIN",(char*)out,&got,size)!=0);
     free(data);free(out);checks+=12;
 }
 

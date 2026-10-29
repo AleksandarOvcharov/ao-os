@@ -18,7 +18,7 @@ int aob_load(const char* filename, aob_context_t* ctx) {
     }
     
     uint32_t file_size;
-    if (fs_read(filename, aob_buffer, &file_size) != 0) {
+    if (fs_read(filename, aob_buffer, &file_size, sizeof(aob_buffer)) != 0) {
         klog_error("Failed to read AOB file");
         return -1;
     }

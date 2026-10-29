@@ -74,24 +74,25 @@ static const char* proc_state_name(process_state_t s) {
     }
 }
 
-static int proc_read(const char* path, char* buffer, uint32_t* size) {
+static int proc_read(const char* path, char* buffer, uint32_t* size, uint32_t max_size) {
     if (!path) return -1;
-    if (strcmp(path, "net/arp") == 0) return net_format_arp_cache(buffer, size, FS_MAX_FILESIZE);
-    if (strcmp(path, "net/dev") == 0) return net_format_device_stats(buffer, size, FS_MAX_FILESIZE);
-    if (strcmp(path, "net/udp") == 0) return net_format_udp(buffer, size, FS_MAX_FILESIZE);
+    if (max_size == 0) return -1;
+    if (strcmp(path, "net/arp") == 0) return net_format_arp_cache(buffer, size, max_size);
+    if (strcmp(path, "net/dev") == 0) return net_format_device_stats(buffer, size, max_size);
+    if (strcmp(path, "net/udp") == 0) return net_format_udp(buffer, size, max_size);
     if (strcmp(path, "processes") != 0) return -1;
     uint32_t pos = 0;
     process_t* list = 0;
     int count = process_list(&list);
-    append_str(buffer, &pos, FS_MAX_FILESIZE, "PID STATE NAME\n");
+    append_str(buffer, &pos, max_size, "PID STATE NAME\n");
     for (int i = 0; i < count; i++) {
         if (list[i].state == PROC_UNUSED) continue;
-        append_u64(buffer, &pos, FS_MAX_FILESIZE, list[i].pid);
-        append_str(buffer, &pos, FS_MAX_FILESIZE, " ");
-        append_str(buffer, &pos, FS_MAX_FILESIZE, proc_state_name(list[i].state));
-        append_str(buffer, &pos, FS_MAX_FILESIZE, " ");
-        append_str(buffer, &pos, FS_MAX_FILESIZE, list[i].name);
-        append_str(buffer, &pos, FS_MAX_FILESIZE, "\n");
+        append_u64(buffer, &pos, max_size, list[i].pid);
+        append_str(buffer, &pos, max_size, " ");
+        append_str(buffer, &pos, max_size, proc_state_name(list[i].state));
+        append_str(buffer, &pos, max_size, " ");
+        append_str(buffer, &pos, max_size, list[i].name);
+        append_str(buffer, &pos, max_size, "\n");
     }
     buffer[pos] = '\0';
     *size = pos;
@@ -126,10 +127,11 @@ static const vfs_ops_t proc_ops = {
     path_fail, path_fail, chdir_fail, proc_cwd, ramfs_disk_info
 };
 
-static int dev_read(const char* path, char* buffer, uint32_t* size) {
+static int dev_read(const char* path, char* buffer, uint32_t* size, uint32_t max_size) {
     if (!path) return -1;
     if (strcmp(path, "null") == 0) { *size = 0; return 0; }
     if (strcmp(path, "zero") == 0) {
+        if (max_size < 512) { *size = 512; return -1; }
         memset(buffer, 0, 512);
         *size = 512;
         return 0;
@@ -179,8 +181,8 @@ int fs_create(const char* name, const char* data, uint32_t size) {
     return vfs_create(name, data, size);
 }
 
-int fs_read(const char* name, char* buffer, uint32_t* size) {
-    return vfs_read(name, buffer, size);
+int fs_read(const char* name, char* buffer, uint32_t* size, uint32_t max_size) {
+    return vfs_read(name, buffer, size, max_size);
 }
 
 int fs_delete(const char* name) {

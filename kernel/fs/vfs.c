@@ -120,9 +120,9 @@ int vfs_create(const char* path, const char* data, uint32_t size) {
     return ops && ops->create ? ops->create(sub, data, size) : -1;
 }
 
-int vfs_read(const char* path, char* buffer, uint32_t* size) {
+int vfs_read(const char* path, char* buffer, uint32_t* size, uint32_t max_size) {
     const char* sub; const vfs_ops_t* ops = resolve(path, &sub);
-    return ops && ops->read ? ops->read(sub, buffer, size) : -1;
+    return ops && ops->read ? ops->read(sub, buffer, size, max_size) : -1;
 }
 
 int vfs_delete(const char* path) {

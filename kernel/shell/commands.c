@@ -720,7 +720,7 @@ void cmd_cat(const char* args) {
     char buffer[FS_MAX_FILESIZE];
     uint32_t size;
     
-    if (fs_read(args, buffer, &size) == 0) {
+    if (fs_read(args, buffer, &size, sizeof(buffer)) == 0) {
         for (uint32_t i = 0; i < size; i++) {
             terminal_putchar(buffer[i]);
         }
@@ -1074,7 +1074,7 @@ void cmd_cp(const char* args) {
 
     static char buf[FS_MAX_FILESIZE];
     uint32_t size;
-    if (fs_read(src, buf, &size) != 0) {
+    if (fs_read(src, buf, &size, sizeof(buf)) != 0) {
         terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
         terminal_writestring("Error: Source not found: ");
         terminal_writestring(src);
@@ -1112,7 +1112,7 @@ void cmd_mv(const char* args) {
 
     static char buf[FS_MAX_FILESIZE];
     uint32_t size;
-    if (fs_read(src, buf, &size) != 0) {
+    if (fs_read(src, buf, &size, sizeof(buf)) != 0) {
         terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
         terminal_writestring("Error: Source not found: ");
         terminal_writestring(src);
@@ -1332,7 +1332,7 @@ void cmd_hexdump(const char* args) {
 
     static char buf[FS_MAX_FILESIZE];
     uint32_t size;
-    if (fs_read(args, buf, &size) != 0) {
+    if (fs_read(args, buf, &size, sizeof(buf)) != 0) {
         terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
         terminal_writestring("Error: File not found: ");
         terminal_writestring(args);
@@ -1396,7 +1396,7 @@ void cmd_wc(const char* args) {
 
     static char buf[FS_MAX_FILESIZE];
     uint32_t size;
-    if (fs_read(args, buf, &size) != 0) {
+    if (fs_read(args, buf, &size, sizeof(buf)) != 0) {
         terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
         terminal_writestring("Error: File not found: ");
         terminal_writestring(args);
@@ -1466,7 +1466,7 @@ void cmd_head(const char* args) {
 
     static char buf[FS_MAX_FILESIZE];
     uint32_t size;
-    if (fs_read(filename, buf, &size) != 0) {
+    if (fs_read(filename, buf, &size, sizeof(buf)) != 0) {
         terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK));
         terminal_writestring("Error: File not found: ");
         terminal_writestring(filename);

@@ -53,7 +53,7 @@ int elf_spawn(const char* filename, const char* cmdline, int background) {
     if (!filename) return -1;
 
     uint32_t file_size = 0;
-    if (fs_read(filename, (char*)elf_buffer, &file_size) != 0) {
+    if (fs_read(filename, (char*)elf_buffer, &file_size, sizeof(elf_buffer)) != 0) {
         klog_error("Failed to read ELF file");
         return -1;
     }

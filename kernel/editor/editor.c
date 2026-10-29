@@ -202,7 +202,7 @@ void editor_open(const char* filename) {
     memset(status_message, 0, sizeof(status_message));
     
     uint32_t size;
-    if (fs_read(filename, buffer, &size) == 0) {
+    if (fs_read(filename, buffer, &size, EDITOR_BUFFER_SIZE - 1) == 0) {
         cursor = size;
         const char* msg = "Loaded";
         for (int i = 0; msg[i]; i++) {

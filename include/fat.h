@@ -14,7 +14,7 @@ void fat_init(void);
 int fat_available(void);
 fat_type_t fat_get_type(void);
 int fat_create(const char* name, const char* data, uint32_t size);
-int fat_read(const char* name, char* buffer, uint32_t* size);
+int fat_read(const char* name, char* buffer, uint32_t* size, uint32_t max_size);
 int fat_delete(const char* name);
 int fat_list(void** entries, int* count);
 int fat_mkdir(const char* name);

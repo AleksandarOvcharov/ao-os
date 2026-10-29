@@ -54,15 +54,16 @@ int ramfs_create(const char* name, const char* data, uint32_t size) {
     return -1;
 }
 
-int ramfs_read(const char* name, char* buffer, uint32_t* size) {
+int ramfs_read(const char* name, char* buffer, uint32_t* size, uint32_t max_size) {
     for (int i = 0; i < MAX_FILES; i++) {
         if (files[i].used && strcmp(files[i].name, name) == 0) {
+            if (files[i].size > max_size) { *size = files[i].size; return -1; }
             memcpy(buffer, files[i].data, files[i].size);
             *size = files[i].size;
             return 0;
         }
     }
-    
+
     return -1;
 }
 

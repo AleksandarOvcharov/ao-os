@@ -16,7 +16,7 @@ typedef struct {
 
 void ramfs_init(void);
 int ramfs_create(const char* name, const char* data, uint32_t size);
-int ramfs_read(const char* name, char* buffer, uint32_t* size);
+int ramfs_read(const char* name, char* buffer, uint32_t* size, uint32_t max_size);
 int ramfs_delete(const char* name);
 int ramfs_list(void);
 ramfs_file_t* ramfs_get_files(void);

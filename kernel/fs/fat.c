@@ -287,8 +287,9 @@ void fat_init(void) {
 int fat_available(void) { return type != FAT_TYPE_NONE; }
 fat_type_t fat_get_type(void) { return type; }
 
-int fat_read(const char* name, char* buffer, uint32_t* size) {
+int fat_read(const char* name, char* buffer, uint32_t* size, uint32_t max_size) {
     fat_dir_entry_t e; if (!fat_available() || find_entry(current_cluster, name, &e, 0) || (e.attr & ATTR_DIRECTORY)) return -1;
+    if (e.size > max_size) { *size = e.size; return -1; }
     uint32_t c = entry_cluster(&e), done = 0;
     uint32_t cycle_anchor = c, cycle_power = 1, cycle_length = 0;
     while (done < e.size) {

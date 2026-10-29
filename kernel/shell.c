@@ -341,7 +341,7 @@ void shell_execute_command(const char* cmd) {
             static char bin_buffer[16384];
             uint32_t file_size;
             
-            if (fs_read(filename, bin_buffer, &file_size) == 0) {
+            if (fs_read(filename, bin_buffer, &file_size, sizeof(bin_buffer)) == 0) {
                 if (file_size > 0 && file_size <= 16384) {
                     // Copy binary to fixed address 0x200000 so string literals
                     // resolve correctly (compiled with -Ttext=0x200000)
