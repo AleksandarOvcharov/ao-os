@@ -303,6 +303,18 @@ void shell_execute_command(const char* cmd) {
                     char b[16]; int n=r,i=0; char t[16]; int j=0; while(n>0){t[j++]=(char)('0'+(n%10)); n/=10;} while(j>0)b[i++]=t[--j]; b[i]='\0';
                     terminal_writestring(b);
                     terminal_writestring("\n");
+                } else if (r != 0) {
+                    /* aob_spawn can fail after a successful load - most
+                     * commonly process_create() finding no free process
+                     * slot (MAX_PROCESSES reached). Without this, that
+                     * failure was previously silent: the shell just
+                     * returned to a fresh prompt with no explanation. */
+                    uint8_t error_color = vga_entry_color(VGA_COLOR_LIGHT_RED, VGA_COLOR_BLACK);
+                    terminal_setcolor(error_color);
+                    terminal_writestring("Error: Failed to execute ");
+                    terminal_writestring(filename);
+                    terminal_writestring("\n");
+                    terminal_setcolor(vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK));
                 }
                 aob_unload(&ctx);
             } else {

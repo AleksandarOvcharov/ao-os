@@ -258,6 +258,18 @@ syscall_handler:
     push r10
     push r11
 
+    ; int 0x80 is an interrupt gate (idt.c sets 0x80 with flags 0xEE), so
+    ; the CPU clears IF on entry and it stays clear for this whole handler
+    ; unless we set it ourselves. Several syscalls (SYS_GETCHAR,
+    ; SYS_READLINE) busy-wait in C for a key that can only ever arrive via
+    ; the IRQ1 keyboard handler - with IF=0 that IRQ can never fire, so any
+    ; syscall that blocks on input (or the timer-driven scheduler, for that
+    ; matter) deadlocks the whole system, not just the calling process.
+    ; The syscalls that touch scheduler-shared state (SYS_EXIT, SYS_WAITPID,
+    ; SYS_SLEEP) already guard their own critical sections internally, so
+    ; it's safe to just allow interrupts for the duration of the syscall.
+    sti
+
     ; System V AMD64 ABI: rdi, rsi, rdx, rcx
     mov rdi, rax        ; 1st param: syscall number
     mov rsi, rbx        ; 2nd param: arg1

@@ -23,4 +23,10 @@
 void syscall_init(void);
 int  syscall_dispatch(uint64_t num, uint64_t arg1, uint64_t arg2, uint64_t arg3);
 
+/* Releases every open file descriptor owned by pid. Called once a process
+ * is fully torn down (process_cleanup in process.c) so a dead process's
+ * fds don't sit leaked forever, now that fds are owned per-process instead
+ * of being a free-for-all any process could read/close. */
+void syscall_close_process_fds(uint64_t pid);
+
 #endif

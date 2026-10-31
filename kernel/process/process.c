@@ -5,11 +5,21 @@
 #include "string.h"
 #include "klog.h"
 #include "timer.h"
+#include "syscall.h"
 
 static process_t processes[MAX_PROCESSES];
 static process_t* current_process = 0;
 static uint64_t next_pid = 1;
 static int scheduling_enabled = 0;
+static uint64_t foreground_pid = 0;  /* see process_set_foreground() in process.h */
+
+void process_set_foreground(uint64_t pid) {
+    foreground_pid = pid;
+}
+
+int process_is_foreground(uint64_t pid) {
+    return foreground_pid == pid;
+}
 
 /* Kernel stacks for processes 1-7 (PID 0 uses boot stack) */
 static uint8_t kernel_stacks[MAX_PROCESSES][PROCESS_KERNEL_STACK_SIZE]
@@ -79,6 +89,8 @@ int process_list(process_t** list) {
 static void process_cleanup(process_t* p) {
     if (!p || p->pid == 0) return;
 
+    syscall_close_process_fds(p->pid);
+
     for (int i = 0; i < p->user_page_count; i++) {
         if (p->user_pages[i]) pmm_free_page(p->user_pages[i]);
         p->user_pages[i] = 0;
@@ -91,7 +103,19 @@ static void process_cleanup(process_t* p) {
 
 int process_map_user_page(process_t* p, uint64_t virt, uint64_t flags) {
     if (!p || !p->is_user || !p->cr3) return -1;
-    if (vmm_get_physical_in(p->cr3, virt & ~(PAGE_SIZE - 1))) return 0;
+
+    /* Idempotency check: skip only if this page is already a *real* user
+     * mapping. Every process's page tables start as a copy of the kernel's
+     * own (vmm_create_address_space), which identity-maps the low address
+     * range used by USER_CODE_BASE/USER_STACK_BASE/USER_API_BASE/
+     * USER_ARGV_BASE as present+writable but NOT PTE_USER. Checking mere
+     * presence here (as before) treated that inherited kernel mapping as
+     * "already set up" and returned success without ever calling
+     * vmm_map_page_in() - so the page kept its kernel-only permissions and
+     * every ring 3 process page-faulted on first access to its own code,
+     * stack, or args. Checking user-accessibility instead of presence
+     * ensures we only skip pages *this* function already mapped. */
+    if (vmm_user_range_ok(p->cr3, virt & ~(PAGE_SIZE - 1), 1)) return 0;
     if (p->user_page_count >= PROCESS_MAX_USER_PAGES) return -1;
 
     uint64_t phys = pmm_alloc_page();
@@ -219,10 +243,15 @@ process_t* process_create(const char* name, uint64_t entry_point, int is_user) {
         ctx->ss = SEL_USER_DS;
         ctx->rsp = USER_STACK_TOP;
 
+        /* Stack, API, and argv pages hold data, never code - mark them
+         * non-executable (W^X) so a stack/data buffer overflow can't be
+         * turned into shellcode execution. */
+        uint64_t data_flags = PTE_WRITABLE | (vmm_nx_supported() ? PTE_NX : 0);
+
         /* User stack pages */
         for (int i = 0; i < PROCESS_USER_STACK_PAGES; i++) {
             uint64_t addr = USER_STACK_BASE + (uint64_t)i * PAGE_SIZE;
-            if (process_map_user_page(p, addr, PTE_WRITABLE) != 0) {
+            if (process_map_user_page(p, addr, data_flags) != 0) {
                 process_cleanup(p);
                 p->state = PROC_UNUSED;
                 return 0;
@@ -230,8 +259,8 @@ process_t* process_create(const char* name, uint64_t entry_point, int is_user) {
         }
 
         /* API and argv pages */
-        if (process_map_user_page(p, USER_API_BASE, PTE_WRITABLE) != 0 ||
-            process_map_user_page(p, USER_ARGV_BASE, PTE_WRITABLE) != 0) {
+        if (process_map_user_page(p, USER_API_BASE, data_flags) != 0 ||
+            process_map_user_page(p, USER_ARGV_BASE, data_flags) != 0) {
             process_cleanup(p);
             p->state = PROC_UNUSED;
             return 0;
@@ -243,15 +272,38 @@ process_t* process_create(const char* name, uint64_t entry_point, int is_user) {
     }
 
     p->kernel_rsp = (uint64_t)(uintptr_t)ctx;
-    p->state = PROC_READY;
+    /* User processes aren't schedulable yet - the caller (aob_spawn/
+     * elf_spawn) still has to map and write the code/API/argv pages after
+     * this returns. Marking PROC_READY here would let the preemptible
+     * scheduler switch to this process (entering ring 3 at its entry
+     * point) before any of that setup has run, faulting on an
+     * unmapped/not-yet-user-accessible code page. process_activate()
+     * flips it to PROC_READY once setup actually finishes. Kernel
+     * processes do no such setup, so they're ready immediately. */
+    p->state = is_user ? PROC_LOADING : PROC_READY;
 
     klog_info("Process created");
     return p;
 }
 
+void process_activate(uint64_t pid) {
+    process_t* p = process_get(pid);
+    if (p && p->state == PROC_LOADING) p->state = PROC_READY;
+}
+
 void process_exit(int exit_code) {
     if (!current_process || current_process->pid == 0) return;
 
+    /* schedule_tick() runs with interrupts already disabled (interrupt
+     * gates, no sti before it) and switches away from any process whose
+     * state is TERMINATED/BLOCKED/SLEEPING the instant it sees it. Setting
+     * state = TERMINATED and then unblocking waiters are two separate
+     * writes; if a timer tick landed between them, the scheduler would
+     * switch this (now-dead) process out before the unblock loop ran, and
+     * since a TERMINATED process never runs again, those waiters would
+     * stay PROC_BLOCKED forever. cli/sti makes the pair atomic so the
+     * timer can't observe the state in between. */
+    asm volatile("cli");
     current_process->state = PROC_TERMINATED;
     current_process->exit_code = exit_code;
 
@@ -263,6 +315,7 @@ void process_exit(int exit_code) {
             processes[i].wait_target = 0;
         }
     }
+    asm volatile("sti");
 
     /* Spin until scheduler switches us out */
     while (1) {
@@ -345,6 +398,10 @@ void process_terminate(uint64_t pid) {
     process_t* p = process_get(pid);
     if (!p || p->pid == 0) return;
 
+    /* Same hazard as process_exit(): state must become TERMINATED and the
+     * blocked-process sweep must happen as one atomic step, or a timer
+     * tick landing in between can leave waiters stuck forever. */
+    asm volatile("cli");
     p->state = PROC_TERMINATED;
 
     for (int i = 0; i < MAX_PROCESSES; i++) {
@@ -352,6 +409,7 @@ void process_terminate(uint64_t pid) {
             processes[i].state = PROC_READY;
         }
     }
+    asm volatile("sti");
 }
 
 /* Called from timer IRQ handler (interrupt.asm).

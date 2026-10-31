@@ -58,6 +58,14 @@ static int calculate_layout(installer_fs_t fs) {
 
     fat_sectors = 1;
     for (int i=0; i<16; i++) {
+        /* volume_sectors > reserved_sectors + root_sectors + 100 is only
+         * guaranteed before this loop starts (the check above). As
+         * fat_sectors grows on later iterations, 2*fat_sectors can exceed
+         * that 100-sector margin - then this subtraction underflows as
+         * uint32_t to a huge value, "clusters" follows, and fat_bytes_for()
+         * makes fat_sectors grow even further next iteration instead of
+         * converging. Bail out rather than spin into a nonsense layout. */
+        if (reserved_sectors + root_sectors + 2 * fat_sectors >= volume_sectors) return INSTALLER_UNSUPPORTED;
         uint32_t data = volume_sectors - reserved_sectors - root_sectors - 2 * fat_sectors;
         uint32_t clusters = data / sectors_per_cluster;
         uint32_t next = (fat_bytes_for(fs, clusters) + 511) / 512;
@@ -65,6 +73,11 @@ static int calculate_layout(installer_fs_t fs) {
         fat_sectors = next;
     }
     first_data_sector = reserved_sectors + 2 * fat_sectors + root_sectors;
+    /* Same underflow risk as above, now against the converged fat_sectors -
+     * without this, a pathological size could still slip through to the
+     * subtraction below and masquerade as a huge, wrongly-FAT32-range
+     * cluster count, corrupting every subsequent layout calculation. */
+    if (first_data_sector >= volume_sectors) return INSTALLER_UNSUPPORTED;
     uint32_t clusters = (volume_sectors - first_data_sector) / sectors_per_cluster;
     if ((fs == INSTALLER_FS_FAT12 && clusters >= 4085) ||
         (fs == INSTALLER_FS_FAT16 && (clusters < 4085 || clusters >= 65525)) ||

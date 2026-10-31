@@ -26,6 +26,12 @@
 
 void vmm_init(void);
 
+/* True once EFER.NXE has actually been turned on (requires CPU support,
+ * checked in vmm_init()). Callers must gate PTE_NX on this - setting that
+ * bit while EFER.NXE=0 makes it a reserved bit instead of "ignored", and
+ * every access through that page table entry will fault. */
+int vmm_nx_supported(void);
+
 /* Map a 4KB virtual page to a physical page */
 int vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags);
 int vmm_map_page_in(uint64_t cr3, uint64_t virt, uint64_t phys, uint64_t flags);
@@ -38,6 +44,15 @@ uint64_t vmm_unmap_page_in(uint64_t cr3, uint64_t virt);
  * Returns 0 if not mapped. */
 uint64_t vmm_get_physical(uint64_t virt);
 uint64_t vmm_get_physical_in(uint64_t cr3, uint64_t virt);
+
+/* User-pointer validation. Both assume `cr3` is the address space currently
+ * loaded in CR3 (true for syscalls, which run on the calling process's page
+ * tables without a context switch) - they check mapping/permission bits via
+ * the page tables but read string bytes straight through the virtual
+ * pointer, which only resolves correctly against the live CR3.
+ * Reject (don't dereference) anything that doesn't pass these. */
+int vmm_user_range_ok(uint64_t cr3, uint64_t virt, uint64_t size);
+long vmm_user_strlen(uint64_t cr3, uint64_t virt, uint64_t max_len);
 
 /* Invalidate a single TLB entry */
 void vmm_invlpg(uint64_t addr);

@@ -68,8 +68,25 @@ void ata_select_drive(int slave) {
     ata_drive_select = slave ? 0xF0 : 0xE0;
 }
 
+/* ata_read_sector/ata_write_sector are each one stateful, multi-step
+ * exchange with a single physical controller (select drive, program LBA,
+ * issue command, wait, transfer 256 words) - there's no per-transaction
+ * identifier, so two interleaved transactions would scramble into one
+ * another's bytes. They're reachable from preemptible contexts now
+ * (SYS_OPEN's fs_read() runs with interrupts enabled - see syscall_handler
+ * in interrupt.asm), so a timer tick landing mid-transaction could switch
+ * to a different process that starts its own disk I/O before this one
+ * finishes. cli/sti makes each call atomic with respect to the scheduler,
+ * the same technique used in process.c for its own cross-tick hazards.
+ * This never risks a GETCHAR-style deadlock: unlike waiting on a keypress,
+ * ata_wait_bsy()/ata_wait_drq() poll a hardware status port that updates
+ * on its own regardless of whether interrupts are enabled. */
+
 int ata_read_sector(uint32_t lba, uint8_t* buffer) {
-    if (ata_wait_bsy() != 0) return -1;
+    asm volatile("cli");
+    int result = -1;
+
+    if (ata_wait_bsy() != 0) goto done;
 
     outb(ATA_REG_DRIVE, ata_drive_select | ((lba >> 24) & 0x0F));
     outb(ATA_REG_SECCOUNT, 1);
@@ -78,15 +95,14 @@ int ata_read_sector(uint32_t lba, uint8_t* buffer) {
     outb(ATA_REG_LBA_HIGH, (uint8_t)(lba >> 16));
     outb(ATA_REG_COMMAND, ATA_CMD_READ_PIO);
 
-    if (ata_wait_bsy() != 0) return -1;
+    if (ata_wait_bsy() != 0) goto done;
 
-    uint8_t status = inb(ATA_REG_STATUS);
-    if (status & ATA_STATUS_ERR) {
+    if (inb(ATA_REG_STATUS) & ATA_STATUS_ERR) {
         klog_error("ATA read error");
-        return -1;
+        goto done;
     }
 
-    if (ata_wait_drq() != 0) return -1;
+    if (ata_wait_drq() != 0) goto done;
 
     for (int i = 0; i < 256; i++) {
         uint16_t data = inw(ATA_REG_DATA);
@@ -94,11 +110,17 @@ int ata_read_sector(uint32_t lba, uint8_t* buffer) {
         buffer[i * 2 + 1] = (uint8_t)(data >> 8);
     }
 
-    return 0;
+    result = 0;
+done:
+    asm volatile("sti");
+    return result;
 }
 
 int ata_write_sector(uint32_t lba, uint8_t* buffer) {
-    if (ata_wait_bsy() != 0) return -1;
+    asm volatile("cli");
+    int result = -1;
+
+    if (ata_wait_bsy() != 0) goto done;
 
     outb(ATA_REG_DRIVE, ata_drive_select | ((lba >> 24) & 0x0F));
     outb(ATA_REG_SECCOUNT, 1);
@@ -107,8 +129,8 @@ int ata_write_sector(uint32_t lba, uint8_t* buffer) {
     outb(ATA_REG_LBA_HIGH, (uint8_t)(lba >> 16));
     outb(ATA_REG_COMMAND, ATA_CMD_WRITE_PIO);
 
-    if (ata_wait_bsy() != 0) return -1;
-    if (ata_wait_drq() != 0) return -1;
+    if (ata_wait_bsy() != 0) goto done;
+    if (ata_wait_drq() != 0) goto done;
 
     for (int i = 0; i < 256; i++) {
         uint16_t data = buffer[i * 2] | (buffer[i * 2 + 1] << 8);
@@ -116,7 +138,10 @@ int ata_write_sector(uint32_t lba, uint8_t* buffer) {
     }
 
     outb(ATA_REG_COMMAND, 0xE7);
-    if (ata_wait_bsy() != 0) return -1;
+    if (ata_wait_bsy() != 0) goto done;
 
-    return 0;
+    result = 0;
+done:
+    asm volatile("sti");
+    return result;
 }

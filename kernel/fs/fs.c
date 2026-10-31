@@ -65,6 +65,7 @@ static void append_u64(char* b, uint32_t* p, uint32_t max, uint64_t v) {
 
 static const char* proc_state_name(process_state_t s) {
     switch (s) {
+        case PROC_LOADING: return "LOADING";
         case PROC_READY: return "READY";
         case PROC_RUNNING: return "RUNNING";
         case PROC_BLOCKED: return "BLOCKED";

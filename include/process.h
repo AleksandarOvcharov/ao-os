@@ -3,7 +3,13 @@
 
 #include <stdint.h>
 
-#define MAX_PROCESSES 8
+/* Each extra slot costs one process_t (modest) plus one
+ * PROCESS_KERNEL_STACK_SIZE kernel stack (8 KiB) of static BSS - 16 slots
+ * costs ~128 KiB total, trivial against the 32+ MiB this kernel targets.
+ * This doesn't remove the fixed ceiling (process_create() still fails
+ * outright once full - see shell.c's handling of that return), just gives
+ * more headroom before it's hit in normal interactive use. */
+#define MAX_PROCESSES 16
 #define PROCESS_KERNEL_STACK_SIZE 8192
 #define PROCESS_USER_STACK_PAGES 4
 #define PROCESS_MAX_USER_PAGES 256
@@ -24,6 +30,9 @@
 
 typedef enum {
     PROC_UNUSED = 0,
+    PROC_LOADING,  /* process_create() returned it, but the caller hasn't
+                    * finished mapping/writing its code, API, and argv pages
+                    * yet - not schedulable until process_activate(). */
     PROC_READY,
     PROC_RUNNING,
     PROC_BLOCKED,
@@ -77,11 +86,29 @@ int process_waitpid(uint64_t pid, int* status, int options);
 int process_list(process_t** list);
 int process_reap_terminated(void);
 void process_detach(uint64_t pid);
+/* Marks a PROC_LOADING process schedulable. Callers (aob_spawn/elf_spawn)
+ * must call this only after they've finished mapping and writing all of
+ * the process's code/API/argv pages - see PROC_LOADING. */
+void process_activate(uint64_t pid);
 void process_sleep_ticks(uint64_t ticks);
 int process_map_user_page(process_t* p, uint64_t virt, uint64_t flags);
 int process_write_user(process_t* p, uint64_t virt, const void* data, uint64_t size);
 int process_zero_user(process_t* p, uint64_t virt, uint64_t size);
 int process_setup_user_args(process_t* p, const char* full_cmd);
+
+/* Keyboard input ownership. There is one global PS/2 keyboard ring buffer
+ * (keyboard.c) with no per-process queues, so with multiple processes able
+ * to call ao_getchar()/ao_readline() concurrently (any backgrounded job),
+ * keystrokes meant for whichever one the user is actually looking at could
+ * otherwise be stolen by any other process also polling for input. Only
+ * the foreground pid's SYS_GETCHAR/SYS_READLINE are allowed to consume
+ * from the buffer (see syscall.c); everyone else just never reads from it.
+ * Defaults to 0 (no user process - i.e. only the kernel/shell's own direct
+ * keyboard_getchar() calls go through). Set/restored around a *foreground*
+ * aob_spawn/elf_spawn wait; a background ('&') job is never made
+ * foreground, so it can never consume input meant for the shell. */
+void process_set_foreground(uint64_t pid);
+int process_is_foreground(uint64_t pid);
 
 /* Scheduler */
 void scheduler_start(void);  /* Enable scheduling (call after boot completes) */

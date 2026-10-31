@@ -14,6 +14,7 @@
 #define EM_X86_64     62
 #define EV_CURRENT    1
 #define PT_LOAD       1
+#define PF_X          1
 #define PF_W          2
 
 #define ELF_LOAD_BUFFER_SIZE 131072
@@ -31,6 +32,9 @@ static uint64_t page_up(uint64_t v) {
 static int map_range(process_t* proc, uint64_t start, uint64_t end, uint32_t ph_flags) {
     uint64_t flags = PTE_USER;
     if (ph_flags & PF_W) flags |= PTE_WRITABLE;
+    /* W^X: a segment the ELF doesn't declare executable gets marked NX,
+     * so data/bss can't be turned into shellcode even if it's writable. */
+    if (!(ph_flags & PF_X) && vmm_nx_supported()) flags |= PTE_NX;
 
     for (uint64_t addr = page_down(start); addr < page_up(end); addr += 4096) {
         if (process_map_user_page(proc, addr, flags) != 0) return -1;
@@ -120,12 +124,20 @@ int elf_spawn(const char* filename, const char* cmdline, int background) {
     process_write_user(proc, USER_API_BASE, api, sizeof(api));
     process_setup_user_args(proc, cmdline ? cmdline : filename);
 
+    /* Everything the process needs is mapped and written now - safe to
+     * let the scheduler actually run it. */
+    process_activate(proc->pid);
+
     if (background) {
         process_detach(proc->pid);
         return (int)proc->pid;
     }
 
+    /* Only the foreground process may consume keyboard input - see
+     * process_set_foreground(). */
+    process_set_foreground(proc->pid);
     process_wait(proc->pid);
+    process_set_foreground(0);
     return 0;
 }
 

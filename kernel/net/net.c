@@ -444,6 +444,12 @@ static void handle_ipv4(const uint8_t* frame, uint16_t len) {
     uint8_t ihl = (uint8_t)((ip[0] & 0x0F) * 4);
     if (ihl < 20 || len < 14 + ihl) return;
     uint16_t total = bswap16(*(const uint16_t*)(ip + 2));
+    /* total is the attacker-controlled IP total-length field. Without this
+     * check, a packet with total < ihl makes `total - ihl` below underflow
+     * as uint16_t to ~65526, and checksum() has no bounds checking of its
+     * own - it would read ~64KB past the 1600-byte frame buffer in
+     * net_poll(). One malformed packet, no auth, crashes the kernel. */
+    if (total < ihl) { status.dropped++; return; }
     if (14 + total > len) { status.dropped++; return; }
     if (checksum(ip, ihl) != 0) { status.checksum_errors++; return; }
     uint32_t src = bswap32(*(const uint32_t*)(ip + 12));

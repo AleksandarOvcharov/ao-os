@@ -2,6 +2,7 @@
 #include "pmm.h"
 #include "string.h"
 #include "klog.h"
+#include "cpu.h"
 
 /* 4-Level Page Table Manager for x86-64.
  *
@@ -44,6 +45,21 @@ static uint64_t alloc_table_page(void) {
     return page;
 }
 
+static int nx_available = 0;
+
+#define IA32_EFER     0xC0000080
+#define EFER_NXE      (1ULL << 11)
+
+static inline uint64_t rdmsr(uint32_t msr) {
+    uint32_t lo, hi;
+    asm volatile("rdmsr" : "=a"(lo), "=d"(hi) : "c"(msr));
+    return ((uint64_t)hi << 32) | lo;
+}
+
+static inline void wrmsr(uint32_t msr, uint64_t value) {
+    asm volatile("wrmsr" :: "c"(msr), "a"((uint32_t)value), "d"((uint32_t)(value >> 32)));
+}
+
 void vmm_init(void) {
     /* Use the bootloader's existing PML4 (identity-mapped 0-2GB with 2MB pages).
      * We manage it in-place rather than allocating a new one, which avoids
@@ -51,7 +67,23 @@ void vmm_init(void) {
      * works directly on these page tables. */
     kernel_pml4_phys = vmm_get_cr3() & PTE_ADDR_MASK;
 
+    /* PTE_NX (bit 63) is reserved, not "ignored", when EFER.NXE=0 - setting
+     * it on an entry used for translation would fault every access through
+     * that entry. Only start handing it out once the CPU has NX and we've
+     * actually turned EFER.NXE on. */
+    if (cpu_get_info()->ext_features & CPU_EXT_NX) {
+        wrmsr(IA32_EFER, rdmsr(IA32_EFER) | EFER_NXE);
+        nx_available = 1;
+        klog_info("NX (no-execute) page protection enabled");
+    } else {
+        klog_warn("CPU has no NX support - user pages cannot be marked non-executable");
+    }
+
     klog_info("VMM initialized with 4-level paging");
+}
+
+int vmm_nx_supported(void) {
+    return nx_available;
 }
 
 uint64_t vmm_get_kernel_cr3(void) {
@@ -236,6 +268,71 @@ uint64_t vmm_get_physical_in(uint64_t cr3, uint64_t virt) {
 
 uint64_t vmm_get_physical(uint64_t virt) {
     return vmm_get_physical_in(kernel_pml4_phys, virt);
+}
+
+/* Returns 1 if the single 4KB page containing `virt` is present and marked
+ * PTE_USER at every level of the walk (i.e. actually reachable from ring 3),
+ * 0 otherwise. Used to validate pointers a syscall receives from user code
+ * before the kernel dereferences them - a page that is merely *present*
+ * (e.g. a kernel mapping seeded into every process's address space) must
+ * not be treated as user-accessible. */
+static int vmm_user_page_ok(uint64_t cr3, uint64_t virt) {
+    cr3 &= PTE_ADDR_MASK;
+    if (!cr3) return 0;
+    uint64_t* pml4 = phys_to_virt(cr3);
+
+    uint64_t pml4_idx = PML4_INDEX(virt);
+    if ((pml4[pml4_idx] & (PTE_PRESENT | PTE_USER)) != (PTE_PRESENT | PTE_USER)) return 0;
+    uint64_t* pdpt = phys_to_virt(pml4[pml4_idx] & PTE_ADDR_MASK);
+
+    uint64_t pdpt_idx = PDPT_INDEX(virt);
+    if ((pdpt[pdpt_idx] & (PTE_PRESENT | PTE_USER)) != (PTE_PRESENT | PTE_USER)) return 0;
+    uint64_t* pd = phys_to_virt(pdpt[pdpt_idx] & PTE_ADDR_MASK);
+
+    uint64_t pd_idx = PD_INDEX(virt);
+    if ((pd[pd_idx] & (PTE_PRESENT | PTE_USER)) != (PTE_PRESENT | PTE_USER)) return 0;
+
+    if (pd[pd_idx] & PTE_HUGE) return 1;  /* 2MB page, already checked */
+
+    uint64_t* pt = phys_to_virt(pd[pd_idx] & PTE_ADDR_MASK);
+    uint64_t pt_idx = PT_INDEX(virt);
+    return (pt[pt_idx] & (PTE_PRESENT | PTE_USER)) == (PTE_PRESENT | PTE_USER);
+}
+
+/* Validates that every byte in [virt, virt+size) belongs to a page mapped
+ * PTE_USER in the given address space. size == 0 is rejected: callers must
+ * not use a zero-length range to skip validation. Returns 1 if the whole
+ * range is user-accessible, 0 otherwise (including on virt+size overflow). */
+int vmm_user_range_ok(uint64_t cr3, uint64_t virt, uint64_t size) {
+    if (size == 0) return 0;
+    if (virt + size < virt) return 0;  /* overflow */
+
+    uint64_t page = virt & ~(uint64_t)(PAGE_SIZE - 1);
+    uint64_t end = virt + size;
+    for (; page < end; page += PAGE_SIZE) {
+        if (!vmm_user_page_ok(cr3, page)) return 0;
+    }
+    return 1;
+}
+
+/* Validates a NUL-terminated user string starting at `virt`, up to and
+ * including `max_len` bytes of content (NUL not counted). Returns the
+ * string length on success, or -1 if the NUL wasn't found within max_len
+ * bytes or any touched byte lies outside a user-accessible page. */
+long vmm_user_strlen(uint64_t cr3, uint64_t virt, uint64_t max_len) {
+    uint64_t page = virt & ~(uint64_t)(PAGE_SIZE - 1);
+    if (!vmm_user_page_ok(cr3, page)) return -1;
+
+    for (uint64_t i = 0; i < max_len; i++) {
+        uint64_t addr = virt + i;
+        uint64_t this_page = addr & ~(uint64_t)(PAGE_SIZE - 1);
+        if (this_page != page) {
+            page = this_page;
+            if (!vmm_user_page_ok(cr3, page)) return -1;
+        }
+        if (*(const char*)(uintptr_t)addr == '\0') return (long)i;
+    }
+    return -1;
 }
 
 static void free_private_tables(uint64_t table_phys, int level) {

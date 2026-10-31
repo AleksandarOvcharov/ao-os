@@ -78,6 +78,11 @@ int aob_spawn(aob_context_t* ctx, const char* cmdline, int background) {
         return -1;
     }
 
+    /* AOB is a single flat code+data blob with no segment metadata (unlike
+     * ELF's PT_LOAD/p_flags), so there's no way to tell which bytes are
+     * instructions vs. mutable globals - the whole region has to stay
+     * writable and executable. ELF programs get real W^X (see elf.c);
+     * AOB can't without a format change. */
     uint32_t pages = (ctx->code_size + 4095) / 4096;
     if (pages == 0) pages = 1;
     for (uint32_t i = 0; i < pages; i++) {
@@ -105,12 +110,21 @@ int aob_spawn(aob_context_t* ctx, const char* cmdline, int background) {
     process_write_user(proc, USER_API_BASE, api, sizeof(api));
     process_setup_user_args(proc, cmdline ? cmdline : pname);
 
+    /* Everything the process needs is mapped and written now - safe to
+     * let the scheduler actually run it. */
+    process_activate(proc->pid);
+
     if (background) {
         process_detach(proc->pid);
         return (int)proc->pid;
     }
 
+    /* Only the foreground process may consume keyboard input (see
+     * process_set_foreground()) - this program is the one the user is
+     * actually interacting with until it exits. */
+    process_set_foreground(proc->pid);
     process_wait(proc->pid);
+    process_set_foreground(0);
 
     return 0;
 }
